@@ -229,7 +229,15 @@ make run-falcon-7b-instruct
 sudo apt-get install libssl-dev gcc -y
 ```
 
-### CUDA Kernels
+### Troubleshooting Build Issues
+
+If you encounter any build-related issues, you can try the following solutions:
+- Make sure you have the necessary dependencies installed, including CUDA and NVIDIA drivers.
+- Check for any missing environment variables or incorrect configurations.
+- Verify that you are using the correct version of the required software and libraries.
+- If you are having trouble with CUDA kernels, you can disable them by using the `DISABLE_CUSTOM_KERNELS=True` environment variable.
+
+## CUDA Kernels
 
 The custom CUDA kernels are only tested on NVIDIA A100s. If you have any installation or runtime issues, you can remove
 the kernels by using the `DISABLE_CUSTOM_KERNELS=True` environment variable.
