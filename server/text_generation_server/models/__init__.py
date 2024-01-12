@@ -92,6 +92,11 @@ def get_model(
             trust_remote_code=trust_remote_code,
         )
 
+    
+    # Include AWS credentials in the model initialization process
+    AWS_ACCESS_KEY_ID = '<your_aws_access_key_id>'
+    AWS_SECRET_ACCESS_KEY = '<your_aws_secret_access_key>'
+
     if model_id.startswith("bigcode/"):
         if FLASH_ATTENTION:
             return FlashSantacoderSharded(
