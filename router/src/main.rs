@@ -6,13 +6,16 @@ use opentelemetry::sdk::trace;
 use opentelemetry::sdk::trace::Sampler;
 use opentelemetry::sdk::Resource;
 use opentelemetry::{global, KeyValue};
-use opentelemetry_otlp::WithExportConfig;
+use tracing_subscriber::fmt::layer::SubscriberExt;
+use tracing_subscriber::fmt::layer::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 use text_generation_client::{ClientError, ShardedClient};
 use text_generation_router::{server, HubModelInfo};
 use thiserror::Error;
+use axum_tracing_opentelemetry;
 use tokenizers::{FromPretrainedParameters, Tokenizer};
 use tower_http::cors::AllowOrigin;
 use tracing_subscriber::layer::SubscriberExt;
@@ -306,7 +309,7 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
             .with_exporter(
                 opentelemetry_otlp::new_exporter()
                     .tonic()
-                    .with_endpoint(otlp_endpoint),
+                    .with_endpoint(otlp_endpoint.clone().unwrap()),
             )
             .with_trace_config(
                 trace::config()
@@ -316,7 +319,8 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
                     )]))
                     .with_sampler(Sampler::AlwaysOn),
             )
-            .install_batch(opentelemetry::runtime::Tokio);
+            .install_batch(opentelemetry::runtime::Tokio)
+            .map_err(RouterError::Tokio);
 
         if let Ok(tracer) = tracer {
             layers.push(tracing_opentelemetry::layer().with_tracer(tracer).boxed());
