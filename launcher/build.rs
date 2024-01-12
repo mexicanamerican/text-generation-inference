@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if EmitBuilder::builder()
         .fail_on_error()
         .git_sha(false)
-        .emit()
+        .emit().map_err(|e| format!("Failed to get git sha: {}", e).as_str())? // Try to get the git sha from the local git repository
         .is_err()
     {
         // Unable to get the git sha
