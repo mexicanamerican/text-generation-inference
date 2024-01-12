@@ -1,6 +1,6 @@
-mod health;
-/// Text Generation Inference Webserver
-mod infer;
+pub mod health;
+pub mod infer;
+pub mod main;
 mod queue;
 pub mod server;
 mod validation;
@@ -60,7 +60,6 @@ pub struct Info {
     #[schema(nullable = true, example = "null")]
     pub docker_label: Option<&'static str>,
 }
-
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 pub(crate) struct GenerateParameters {
     #[serde(default)]
