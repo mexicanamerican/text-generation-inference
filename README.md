@@ -83,7 +83,10 @@ The easiest way of getting started is using the official Docker container:
 model=tiiuae/falcon-7b-instruct
 volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
 
-docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
+docker run --gpus all --shm-size 1g -e BUILD_EXTENSIONS=True -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
+
+## Note:
+If custom kernels are required, set `BUILD_EXTENSIONS` to `True` to enable them.
 ```
 **Note:** To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html). We also recommend using NVIDIA drivers with CUDA version 11.8 or higher.
 
@@ -148,7 +151,26 @@ or with Docker:
 ```shell
 model=meta-llama/Llama-2-7b-chat-hf
 volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
-token=<your cli READ token>
+### A note on Shared Memory (shm)
+
+[`NCCL`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html) is a communication framework used by `PyTorch` to do distributed training/inference. `text-generation-inference` makes use of `NCCL` to enable Tensor Parallelism to dramatically speed up inference for large language models.
+
+In order to share data between the different devices of a `NCCL` group and if custom kernels are required, `BUILD_EXTENSIONS` should be set to `True`.
+
+To allow the container to use 1G of Shared Memory and support SHM sharing, we add `--shm-size 1g` on the above command.
+
+If you are running `text-generation-inference` inside `Kubernetes`, you can also add Shared Memory to the container by creating a volume with:
+
+```yaml
+- name: shm
+  emptyDir:
+   medium: Memory
+   sizeLimit: 1Gi
+```
+
+and mounting it to `/dev/shm`.
+
+Finally, you can also disable SHM sharing by using the `NCCL_SHM_DISABLE=1` environment variable. However, note that this will impact performance.token=<your cli READ token>
 
 docker run --gpus all --shm-size 1g -e HUGGING_FACE_HUB_TOKEN=$token -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
 ```
