@@ -1,5 +1,6 @@
 use std::error::Error;
 use vergen::EmitBuilder;
+use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Try to get the git sha from the local git repository
