@@ -23,6 +23,13 @@ jobs:
       SCCACHE_GHA_ENABLED: "on"
       RUSTC_WRAPPER: /usr/local/bin/sccache
       SCCACHE: 0.3.3
+      HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
+    steps:
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libudev-dev
+          sudo apt-get install -y libpthread-stubs0-dev
 
     steps:
       - uses: actions/checkout@v2
