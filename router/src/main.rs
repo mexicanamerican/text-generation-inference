@@ -263,16 +263,16 @@ fn main() -> Result<(), RouterError> {
                 max_total_tokens,
                 waiting_served_ratio,
                 max_batch_prefill_tokens,
-                max_supported_batch_total_tokens,
+                max_batch_total_tokens,
                 max_waiting_tokens,
                 sharded_client,
                 tokenizer,
                 validation_workers,
                 addr,
-                cors_allow_origin,
-                ngrok,
+                cors_allow_origin.unwrap_or(AllowOrigin::Any),
+                ngrok.unwrap_or(false),
                 ngrok_authtoken,
-                ngrok_edge,
+                ngrok_edge.unwrap_or(None),
             )
                 .await?;
             Ok(())
