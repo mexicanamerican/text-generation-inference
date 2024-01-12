@@ -253,6 +253,7 @@ fn main() -> Result<(), RouterError> {
 
             // Run server
             server::run(
+                args.max_input_length, args.max_total_tokens, args.max_concurrent_requests, args.max_best_of, args.max_stop_sequences, args.waiting_served_ratio, args.max_batch_prefill_tokens, max_supported_batch_total_tokens, args.max_waiting_tokens, sharded_client,
                 model_info,
                 shard_info,
                 compat_return_full_text,
