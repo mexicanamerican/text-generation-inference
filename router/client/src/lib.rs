@@ -1,6 +1,6 @@
 //! Text Generation gRPC client library
 
-mod client;
+pub mod client;
 #[allow(clippy::derive_partial_eq_without_eq)]
 mod pb;
 mod sharded_client;
