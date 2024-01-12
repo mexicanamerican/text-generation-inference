@@ -7,12 +7,12 @@ use crate::{
     GenerateParameters, GenerateRequest, GenerateResponse, HubModelInfo, Infer, Info, PrefillToken,
     StreamDetails, StreamResponse, Token, Validation,
 };
-use axum::extract::Extension;
+use axum::extract::{Extension, Json};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use axum::{http, Json, Router};
+use axum::{http, Json, Router, response::IntoResponse, Response};
 use axum_tracing_opentelemetry::opentelemetry_tracing_layer;
 use futures::stream::StreamExt;
 use futures::Stream;
@@ -145,7 +145,7 @@ seed,
 async fn generate(
     infer: Extension<Infer>,
     Json(req): Json<GenerateRequest>,
-) -> Result<(HeaderMap, Json<GenerateResponse>), (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
     let span = tracing::Span::current();
     let start_time = Instant::now();
     metrics::increment_counter!("tgi_request_count");
@@ -672,8 +672,13 @@ pub async fn run(
         .route("/generate_stream", post(generate_stream))
         // AWS Sagemaker route
         .route("/invocations", post(compat_generate))
-        // Base Health route
+        // Health check route
         .route("/health", get(health))
+        .layer(Extension(health_ext.clone()))
+        // Inference API health route
+        .route("/infer-health", get(health))
+        // AWS Sagemaker health route
+        .route("/ping", get(health))
         // Inference API health route
         .route("/", get(health))
         // AWS Sagemaker health route
@@ -724,7 +729,7 @@ pub async fn run(
                     //Wait until all requests are finished to shut down
                     .with_graceful_shutdown(shutdown_signal()),
             );
-
+        
             // Run server
             axum::Server::builder(listener)
                 .serve(app.into_make_service())
