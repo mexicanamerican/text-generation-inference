@@ -2,7 +2,15 @@
 
 There are many ways you can consume Text Generation Inference server in your applications. After launching, you can use the `/generate` route and make a `POST` request to get results from the server. You can also use the `/generate_stream` route if you want TGI to return a stram of tokens. You can make the requests using the tool of your preference, such as curl, Python or TypeScrpt. For a final end-to-end experience, we also open-sourced ChatUI, a chat interface for open-source models.
 
-## curl
+## Troubleshooting GitHub Actions
+
+If the GitHub Actions run fails, follow these troubleshooting steps:
+
+1. **Check the GitHub Actions logs:** Review the error logs and identify any error messages or warnings.
+
+2. **Interpret the error logs:** Look for specific error messages, build failures, or failed steps in the logs.
+
+3. **Consult the GitHub Actions documentation:** Refer to the [GitHub Actions documentation](https://docs.github.com/en/actions) for solutions to common issues or errors.
 
 After the launch, you can query the model using either the `/generate` or `/generate_stream` routes:
 
@@ -51,6 +59,8 @@ To serve both ChatUI and TGI in same environment, simply add your own endpoints 
 
 TODO: Add screenshot
 
-## API documentation
+## GitHub Actions Documentation
+
+For troubleshooting and resolving issues with GitHub Actions, refer to the [GitHub Actions documentation](https://docs.github.com/en/actions) for solutions to common issues or errors.
 
 You can consult the OpenAPI documentation of the `text-generation-inference` REST API using the `/docs` route. The Swagger UI is also available [here](https://huggingface.github.io/text-generation-inference). 
