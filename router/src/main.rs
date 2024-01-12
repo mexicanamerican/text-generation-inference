@@ -252,7 +252,7 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
-            server::run(
+            server::run(model_info, shard_info, compat_return_full_text, max_concurrent_requests, max_best_of, max_stop_sequences, max_input_length, max_total_tokens, waiting_served_ratio, max_batch_prefill_tokens, max_supported_batch_total_tokens, max_waiting_tokens, sharded_client, tokenizer, validation_workers, addr, cors_allow_origin, ngrok, ngrok_authtoken, ngrok_edge,
                 model_info,
                 shard_info,
                 compat_return_full_text,
