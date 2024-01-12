@@ -1,5 +1,5 @@
 /// Text Generation Inference webserver entrypoint
-use axum::http::HeaderValue;
+use axum::http::header::HeaderValue;
 use clap::Parser;
 use opentelemetry::sdk::propagation::TraceContextPropagator;
 use opentelemetry::sdk::trace;
@@ -21,7 +21,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 /// App Configuration
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author, version, about, long_about, version = None)]
 struct Args {
     #[clap(default_value = "128", long, env)]
     max_concurrent_requests: usize,
@@ -120,7 +120,7 @@ fn main() -> Result<(), RouterError> {
         }
     }
 
-    // CORS allowed origins
+    // Configure CORS
     // map to go inside the option and then map to parse from String to HeaderValue
     // Finally, convert to AllowOrigin
     let cors_allow_origin: Option<AllowOrigin> = cors_allow_origin.map(|cors_allow_origin| {
@@ -268,7 +268,7 @@ fn main() -> Result<(), RouterError> {
                 sharded_client,
                 tokenizer,
                 validation_workers,
-                addr,
+                server_address,
                 cors_allow_origin,
                 ngrok,
                 ngrok_authtoken,
@@ -279,7 +279,7 @@ fn main() -> Result<(), RouterError> {
         })
 }
 
-/// Init logging using env variables LOG_LEVEL and LOG_FORMAT:
+/// Initialize logging and configure logging levels and format using environment variables LOG_LEVEL and LOG_FORMAT:
 ///     - otlp_endpoint is an optional URL to an Open Telemetry collector
 ///     - LOG_LEVEL may be TRACE, DEBUG, INFO, WARN or ERROR (default to INFO)
 ///     - LOG_FORMAT may be TEXT or JSON (default to TEXT)
@@ -297,7 +297,7 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
     };
     layers.push(fmt_layer);
 
-    // OpenTelemetry tracing layer
+    // Initialize the OpenTelemetry tracing layer
     if let Some(otlp_endpoint) = otlp_endpoint {
         global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -387,8 +387,8 @@ enum RouterError {
     Info(ClientError),
     #[error("Unable to warmup the Python model shards: {0}")]
     Warmup(ClientError),
-    #[error("Tokio runtime failed to start: {0}")]
+    #[error("The Tokio runtime failed to start: {0}")]
     Tokio(#[from] std::io::Error),
-    #[error("Axum webserver failed: {0}")]
+    #[error("Tokio runtime failed: {0}")]
     Axum(#[from] axum::BoxError),
 }
