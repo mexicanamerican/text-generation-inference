@@ -17,6 +17,7 @@ pub struct Validation {
     max_stop_sequences: usize,
     max_input_length: usize,
     max_total_tokens: usize,
+    sender: Option<flume::Sender<TokenizerRequest>>,
     /// Channel to communicate with the background tokenization task
     sender: Option<flume::Sender<TokenizerRequest>>,
 }
@@ -154,6 +155,228 @@ impl Validation {
             || typical_p.is_some();
 
         if best_of > 1 && !sampling {
+            return Err(BestOfSampling);
+        }
+        
+        let temperature = temperature.unwrap_or(1.0);
+        if temperature <= 0.0 {
+            return Err(ValidationError::Temperature);
+        }
+        
+        let repetition_penalty = repetition_penalty.unwrap_or(1.0);
+        if repetition_penalty <= 0.0 {
+            return Err(ValidationError::RepetitionPenalty);
+        }
+        
+        // Different because the proto default value is not a valid value
+        // for the user
+        let top_p = top_p
+            .map(|value| {
+                if value <= 0.0 || value >= 1.0 {
+                    return Err(ValidationError::TopP);
+                }
+                Ok(value)
+            })
+            .unwrap_or(Ok(1.0))?;
+        
+        let typical_p = typical_p
+            .map(|value| {
+                if value <= 0.0 || value >= 1.0 {
+                    return Err(ValidationError::TypicalP);
+                }
+                Ok(value)
+            })
+            .unwrap_or(Ok(1.0))?;
+        
+        let top_k: u32 = top_k
+            .map(|value| {
+                if value <= 0 {
+                    return Err(ValidationError::TopK);
+                }
+                Ok(value as u32)
+            })
+            .unwrap_or(Ok(0))?;
+        
+        if max_new_tokens == 0 {
+            return Err(ValidationError::NegativeMaxNewTokens);
+        }
+        
+        if stop_sequences.len() > self.max_stop_sequences {
+            return Err(ValidationError::StopSequence(
+                self.max_stop_sequences,
+                stop_sequences.len(),
+            ));
+        }
+        
+        // If seed is None, assign a random one
+        let seed = match seed {
+            None => thread_rng().gen(),
+            Some(seed) => {
+                if best_of > 1 {
+                    return Err(BestOfSeed);
+                }
+                seed
+            }
+        };
+        
+        // Check if inputs is empty
+        if request.inputs.is_empty() {
+            return Err(EmptyInput);
+        }
+        
+        // Check if truncate is strictly positive and less than max_input_length
+        let truncate = truncate
+            .map(|value| {
+                if value == 0 || value > self.max_input_length {
+                    return Err(ValidationError::Truncate(self.max_input_length, value));
+                }
+                Ok(Some(value))
+            })
+            .unwrap_or(Ok(None))?;
+        
+        // Validate inputs
+        let (inputs, input_length) = self
+            .validate_input(request.inputs, truncate, max_new_tokens)
+            .await?;
+        
+        let parameters = NextTokenChooserParameters {
+            temperature,
+            repetition_penalty,
+            top_k,
+            top_p,
+            typical_p,
+            do_sample,
+            seed,
+            watermark,
+        };
+        let stopping_parameters = StoppingCriteriaParameters {
+            max_new_tokens,
+            stop_sequences,
+            ignore_eos_token: false,
+        };
+        
+        metrics::histogram!("tgi_request_max_new_tokens", max_new_tokens as f64);
+        
+        Ok(ValidGenerateRequest {
+            inputs,
+            decoder_input_details,
+            input_length: input_length as u32,
+            truncate: truncate.unwrap_or(self.max_input_length) as u32,
+            parameters,
+            stopping_parameters,
+        })
+        }
+            return Err(BestOfSampling);
+        }
+        
+        let temperature = temperature.unwrap_or(1.0);
+        if temperature <= 0.0 {
+            return Err(ValidationError::Temperature);
+        }
+        
+        let repetition_penalty = repetition_penalty.unwrap_or(1.0);
+        if repetition_penalty <= 0.0 {
+            return Err(ValidationError::RepetitionPenalty);
+        }
+        
+        // Different because the proto default value is not a valid value
+        // for the user
+        let top_p = top_p
+            .map(|value| {
+                if value <= 0.0 || value >= 1.0 {
+                    return Err(ValidationError::TopP);
+                }
+                Ok(value)
+            })
+            .unwrap_or(Ok(1.0))?;
+        
+        let typical_p = typical_p
+            .map(|value| {
+                if value <= 0.0 || value >= 1.0 {
+                    return Err(ValidationError::TypicalP);
+                }
+                Ok(value)
+            })
+            .unwrap_or(Ok(1.0))?;
+        
+        let top_k: u32 = top_k
+            .map(|value| {
+                if value <= 0 {
+                    return Err(ValidationError::TopK);
+                }
+                Ok(value as u32)
+            })
+            .unwrap_or(Ok(0))?;
+        
+        if max_new_tokens == 0 {
+            return Err(ValidationError::NegativeMaxNewTokens);
+        }
+        
+        if stop_sequences.len() > self.max_stop_sequences {
+            return Err(ValidationError::StopSequence(
+                self.max_stop_sequences,
+                stop_sequences.len(),
+            ));
+        }
+        
+        // If seed is None, assign a random one
+        let seed = match seed {
+            None => thread_rng().gen(),
+            Some(seed) => {
+                if best_of > 1 {
+                    return Err(BestOfSeed);
+                }
+                seed
+            }
+        };
+        
+        // Check if inputs is empty
+        if request.inputs.is_empty() {
+            return Err(EmptyInput);
+        }
+        
+        // Check if truncate is strictly positive and less than max_input_length
+        let truncate = truncate
+            .map(|value| {
+                if value == 0 || value > self.max_input_length {
+                    return Err(ValidationError::Truncate(self.max_input_length, value));
+                }
+                Ok(Some(value))
+            })
+            .unwrap_or(Ok(None))?;
+        
+        // Validate inputs
+        let (inputs, input_length) = self
+            .validate_input(request.inputs, truncate, max_new_tokens)
+            .await?;
+        
+        let parameters = NextTokenChooserParameters {
+            temperature,
+            repetition_penalty,
+            top_k,
+            top_p,
+            typical_p,
+            do_sample,
+            seed,
+            watermark,
+        };
+        let stopping_parameters = StoppingCriteriaParameters {
+            max_new_tokens,
+            stop_sequences,
+            ignore_eos_token: false,
+        };
+        
+        metrics::histogram!("tgi_request_max_new_tokens", max_new_tokens as f64);
+        
+        Ok(ValidGenerateRequest {
+            inputs,
+            decoder_input_details,
+            input_length: input_length as u32,
+            truncate: truncate.unwrap_or(self.max_input_length) as u32,
+            parameters,
+            stopping_parameters,
+        })
+        }
             return Err(BestOfSampling);
         }
 
