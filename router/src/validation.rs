@@ -28,7 +28,7 @@ impl Validation {
         max_best_of: usize,
         max_stop_sequences: usize,
         max_input_length: usize,
-        max_total_tokens: usize,
+        max_total_tokens: u32,
     ) -> Self {
         // If we have a fast tokenizer
         let sender = if let Some(tokenizer) = tokenizer {
