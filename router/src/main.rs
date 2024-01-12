@@ -40,6 +40,10 @@ struct Args {
     #[clap(long, env)]
     max_batch_total_tokens: Option<u32>,
     #[clap(default_value = "20", long, env)]
+    github_workflow: bool,
+    workflow_dispatch: bool,
+    publish_model: bool,
+    release_tag: Option<String>,
     max_waiting_tokens: usize,
     #[clap(default_value = "0.0.0.0", long, env)]
     hostname: String,
@@ -80,6 +84,10 @@ fn main() -> Result<(), RouterError> {
         waiting_served_ratio,
         max_batch_prefill_tokens,
         max_batch_total_tokens,
+        github_workflow,
+        workflow_dispatch,
+        publish_model,
+        release_tag,
         max_waiting_tokens,
         hostname,
         port,
@@ -252,7 +260,7 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
-            server::run(
+            server::run_github_actions(github_workflow, workflow_dispatch, publish_model, release_tag,
                 model_info,
                 shard_info,
                 compat_return_full_text,
