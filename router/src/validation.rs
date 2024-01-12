@@ -17,6 +17,9 @@ pub struct Validation {
     max_stop_sequences: usize,
     max_input_length: usize,
     max_total_tokens: usize,
+    max_batch_prefill_tokens: u32,
+    max_batch_total_tokens: Option<u32>,
+    max_waiting_tokens: usize,
     /// Channel to communicate with the background tokenization task
     sender: Option<flume::Sender<TokenizerRequest>>,
 }
@@ -29,6 +32,9 @@ impl Validation {
         max_stop_sequences: usize,
         max_input_length: usize,
         max_total_tokens: usize,
+        max_batch_prefill_tokens: u32,
+        max_batch_total_tokens: Option<u32>,
+        max_waiting_tokens: usize,
     ) -> Self {
         // If we have a fast tokenizer
         let sender = if let Some(tokenizer) = tokenizer {
@@ -41,6 +47,26 @@ impl Validation {
                 let receiver_clone = validation_receiver.clone();
 
                 // Spawn worker
+                tokio::task::spawn_blocking(move || {
+                    tokenizer_worker(tokenizer_clone, receiver_clone)
+                });
+            }
+            Some(validation_sender)
+        } else {
+            None
+        };
+
+        Self {
+            max_best_of,
+            sender,
+            max_stop_sequences,
+            max_input_length,
+            max_total_tokens,
+            max_batch_prefill_tokens,
+            max_batch_total_tokens,
+            max_waiting_tokens,
+        }
+    }
                 tokio::task::spawn_blocking(move || {
                     tokenizer_worker(tokenizer_clone, receiver_clone)
                 });
