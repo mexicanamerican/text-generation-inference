@@ -289,7 +289,8 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
     // STDOUT/STDERR layer
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_file(true)
-        .with_line_number(true);
+        .with_line_number(true)
+        .with_test(true);
 
     let fmt_layer = match json_output {
         true => fmt_layer.json().flatten_event(true).boxed(),

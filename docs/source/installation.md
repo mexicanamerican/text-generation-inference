@@ -65,6 +65,18 @@ BUILD_EXTENSIONS=True make install
 On some machines, you may also need the OpenSSL libraries and gcc. On Linux machines, run:
 
 ```bash
+### Troubleshooting GitHub Actions
+
+If the GitHub Actions run fails, follow these troubleshooting steps:
+
+1. **Check the GitHub Actions logs:** Review the error logs and identify any error messages or warnings.
+
+2. **Interpret the error logs:** Look for specific error messages, build failures, or failed steps in the logs.
+
+3. **Consult the GitHub Actions documentation:** Refer to the [GitHub Actions documentation](https://docs.github.com/en/actions) for solutions to common issues or errors.
+
+
+```bash
 sudo apt-get install libssl-dev gcc -y
 ```
 

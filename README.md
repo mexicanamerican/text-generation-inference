@@ -43,7 +43,8 @@ to power Hugging Chat, the Inference API and Inference Endpoint.
 - [Continuous batching of incoming requests](https://github.com/huggingface/text-generation-inference/tree/main/router) for increased total throughput
 - Optimized transformers code for inference using [flash-attention](https://github.com/HazyResearch/flash-attention) and [Paged Attention](https://github.com/vllm-project/vllm) on the most popular architectures
 - Quantization with [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) and [GPT-Q](https://arxiv.org/abs/2210.17323)
-- [Safetensors](https://github.com/huggingface/safetensors) weight loading
+- [Troubleshooting GitHub Actions](#troubleshooting-github-actions)
+  - [Safetensors](#troubleshooting-github-actions)
 - Watermarking with [A Watermark for Large Language Models](https://arxiv.org/abs/2301.10226)
 - Logits warper (temperature scaling, top-p, top-k, repetition penalty, more details see [transformers.LogitsProcessor](https://huggingface.co/docs/transformers/internal/generation_utils#transformers.LogitsProcessor))
 - Stop sequences
@@ -73,7 +74,15 @@ or
 
 `AutoModelForSeq2SeqLM.from_pretrained(<model>, device_map="auto")`
 
-## Get started
+### Troubleshooting GitHub Actions
+
+If the GitHub Actions run fails, follow these troubleshooting steps:
+
+1. **Check the GitHub Actions logs:** Review the error logs and identify any error messages or warnings.
+
+2. **Interpret the error logs:** Look for specific error messages, build failures, or failed steps in the logs.
+
+3. **Consult the GitHub Actions documentation:** Refer to the [GitHub Actions documentation](https://docs.github.com/en/actions) for solutions to common issues or errors.
 
 ### Docker
 
@@ -132,7 +141,15 @@ print(text)
 You can consult the OpenAPI documentation of the `text-generation-inference` REST API using the `/docs` route.
 The Swagger UI is also available at: [https://huggingface.github.io/text-generation-inference](https://huggingface.github.io/text-generation-inference).
 
-### Using a private or gated model
+### Troubleshooting GitHub Actions
+
+If the GitHub Actions run fails, follow these troubleshooting steps:
+
+1. **Check the GitHub Actions logs:** Review the error logs and identify any error messages or warnings.
+
+2. **Interpret the error logs:** Look for specific error messages, build failures, or failed steps in the logs.
+
+3. **Consult the GitHub Actions documentation:** Refer to the [GitHub Actions documentation](https://docs.github.com/en/actions) for solutions to common issues or errors.
 
 You have the option to utilize the `HUGGING_FACE_HUB_TOKEN` environment variable for configuring the token employed by
 `text-generation-inference`. This allows you to gain access to protected resources.
@@ -229,7 +246,15 @@ make run-falcon-7b-instruct
 sudo apt-get install libssl-dev gcc -y
 ```
 
-### CUDA Kernels
+### Troubleshooting GitHub Actions
+
+If the GitHub Actions run fails, follow these troubleshooting steps:
+
+1. **Check the GitHub Actions logs:** Review the error logs and identify any error messages or warnings.
+
+2. **Interpret the error logs:** Look for specific error messages, build failures, or failed steps in the logs.
+
+3. **Consult the GitHub Actions documentation:** Refer to the [GitHub Actions documentation](https://docs.github.com/en/actions) for solutions to common issues or errors.
 
 The custom CUDA kernels are only tested on NVIDIA A100s. If you have any installation or runtime issues, you can remove
 the kernels by using the `DISABLE_CUSTOM_KERNELS=True` environment variable.
@@ -276,7 +301,15 @@ make integration-tests
 ```
 
 
-## Other supported hardware
+## Troubleshooting GitHub Actions
+
+If the GitHub Actions run fails, follow these troubleshooting steps:
+
+1. **Check the GitHub Actions logs:** Review the error logs and identify any error messages or warnings.
+
+2. **Interpret the error logs:** Look for specific error messages, build failures, or failed steps in the logs.
+
+3. **Consult the GitHub Actions documentation:** Refer to the [GitHub Actions documentation](https://docs.github.com/en/actions) for solutions to common issues or errors.
 
 TGI is also supported on the following AI hardware accelerators:
 - *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)
