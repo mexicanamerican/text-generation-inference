@@ -69,7 +69,7 @@ struct Args {
 
 fn main() -> Result<(), RouterError> {
     // Get args
-    let args = Args::parse();
+    let args = Args::parse_from_env();
     // Pattern match configuration
     let Args {
         max_concurrent_requests,
@@ -252,7 +252,7 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
-            server::run(
+            server::run_async(
                 model_info,
                 shard_info,
                 compat_return_full_text,
@@ -284,7 +284,7 @@ fn main() -> Result<(), RouterError> {
 ///     - LOG_LEVEL may be TRACE, DEBUG, INFO, WARN or ERROR (default to INFO)
 ///     - LOG_FORMAT may be TEXT or JSON (default to TEXT)
 fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
-    let mut layers = Vec::new();
+    let mut layers = tracing_subscriber::registry();
 
     // STDOUT/STDERR layer
     let fmt_layer = tracing_subscriber::fmt::layer()
