@@ -24,6 +24,17 @@ You can simply install `huggingface-hub` package with pip.
 pip install huggingface-hub
 ```
 
+Once you start the TGI server, instantiate `InferenceClient(model=URL_TO_ENDPOINT_SERVING_TGI))` with the URL to the endpoint serving the model. You can then call `text_generation()` to hit the endpoint through Python. 
+
+```python
+from huggingface_hub import InferenceClient is a Python library to interact with the Hugging Face Hub, including its endpoints. It provides a nice high-level class, [`~huggingface_hub.InferenceClient`], which makes it easy to make calls to a TGI endpoint. `InferenceClient` also takes care of parameter validation and provides a simple to-use interface.
+
+You can simply install `huggingface-hub` package with pip.
+
+```bash
+pip install huggingface-hub
+```
+
 Once you start the TGI server, instantiate `InferenceClient()` with the URL to the endpoint serving the model. You can then call `text_generation()` to hit the endpoint through Python. 
 
 ```python
