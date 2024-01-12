@@ -11,7 +11,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 use text_generation_client::{ClientError, ShardedClient};
-use text_generation_router::{server, HubModelInfo};
+use server::{run};
 use thiserror::Error;
 use tokenizers::{FromPretrainedParameters, Tokenizer};
 use tower_http::cors::AllowOrigin;
