@@ -502,7 +502,7 @@ async fn metrics(prom_handle: Extension<PrometheusHandle>) -> String {
 
 /// Serving method
 #[allow(clippy::too_many_arguments)]
-pub async fn run(
+pub async fn run(config: Config,
     model_info: HubModelInfo,
     shard_info: ShardInfo,
     compat_return_full_text: bool,

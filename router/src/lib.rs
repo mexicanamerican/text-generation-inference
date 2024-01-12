@@ -1,4 +1,5 @@
 mod health;
+mod config;
 /// Text Generation Inference Webserver
 mod infer;
 mod queue;

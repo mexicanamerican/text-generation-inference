@@ -28,6 +28,7 @@ pub(crate) struct Entry {
 /// Request Queue
 #[derive(Debug, Clone)]
 pub(crate) struct Queue {
+    max_waiting_tokens: usize,
     /// Channel to communicate with the background queue task
     queue_sender: flume::Sender<QueueCommand>,
 }
