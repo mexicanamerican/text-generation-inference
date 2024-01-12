@@ -99,7 +99,7 @@ example = json ! ({"error": "unhealthy", "error_type": "healthcheck"})),
 )]
 #[instrument(skip(health))]
 /// Health check method
-async fn health(mut health: Extension<Health>) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+async fn verify_model_interaction(mut health: Extension<Health>) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
     match health.check().await {
         true => Ok(()),
         false => Err((
@@ -142,7 +142,7 @@ time_per_token,
 seed,
 )
 )]
-async fn generate(
+async fn verify_model_interaction_and_handle_exceptions(
     infer: Extension<Infer>,
     Json(req): Json<GenerateRequest>,
 ) -> Result<(HeaderMap, Json<GenerateResponse>), (StatusCode, Json<ErrorResponse>)> {
@@ -502,7 +502,7 @@ async fn metrics(prom_handle: Extension<PrometheusHandle>) -> String {
 
 /// Serving method
 #[allow(clippy::too_many_arguments)]
-pub async fn run(
+pub async fn run_github_actions(
     model_info: HubModelInfo,
     shard_info: ShardInfo,
     compat_return_full_text: bool,
