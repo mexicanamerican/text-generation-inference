@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+pub mod health;
 use text_generation_client::{
     Batch, NextTokenChooserParameters, Request, ShardedClient, StoppingCriteriaParameters,
 };
@@ -25,7 +26,7 @@ impl Health {
     pub(crate) async fn check(&mut self) -> bool {
         if self.generation_health.load(Ordering::SeqCst) {
             // Generation is healthy, we only check that the shards are answering gRPC calls
-            self.client.health().await.is_ok()
+            self.self.health.check().await
         } else {
             // Generation is unhealthy or have not sent any generation request yet
 
