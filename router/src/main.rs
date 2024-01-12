@@ -13,7 +13,7 @@ use std::time::Duration;
 use text_generation_client::{ClientError, ShardedClient};
 use text_generation_router::{server, HubModelInfo};
 use thiserror::Error;
-use tokenizers::{FromPretrainedParameters, Tokenizer};
+use tokenizers::{FromPretrainedParameters, Tokenizer, Model as TokenizerModel};
 use tower_http::cors::AllowOrigin;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
