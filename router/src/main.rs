@@ -293,6 +293,8 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
         .with_file(true)
         .with_line_number(true);
 
+    let log_level = std::env::var("LOG_LEVEL").ok().unwrap_or("INFO".to_string());
+    let log_format = std::env::var("LOG_FORMAT").ok().unwrap_or("TEXT".to_string());
     let fmt_layer = match json_output {
         true => fmt_layer.json().flatten_event(true).boxed(),
         false => fmt_layer.boxed(),
@@ -333,7 +335,8 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
     tracing_subscriber::registry()
         .with(env_filter)
         .with(layers)
-        .init();
+        .map_err(|err| RouterError::Tokio(err.to_string()))
+        .unwrap_or_else(|e| panic!("Failed to initialize tracing: {}", e));
 }
 
 /// get model info from the Huggingface Hub
