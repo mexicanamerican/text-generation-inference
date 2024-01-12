@@ -252,6 +252,8 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
+            init_logging(otlp_endpoint, json_output);
+            init_logging(otlp_endpoint, json_output);
             server::run(
                 model_info,
                 shard_info,
