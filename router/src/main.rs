@@ -98,25 +98,25 @@ fn main() -> Result<(), RouterError> {
     // Validate args
     if max_input_length >= max_total_tokens {
         return Err(RouterError::ArgumentValidation(
-            "`max_input_length` must be < `max_total_tokens`".to_string(),
+            "`max_input_length` must be less than `max_total_tokens`".to_string(),
         ));
     }
     if max_input_length as u32 > max_batch_prefill_tokens {
-        return Err(RouterError::ArgumentValidation(format!("`max_batch_prefill_tokens` must be >= `max_input_length`. Given: {max_batch_prefill_tokens} and {max_input_length}")));
+        return Err(RouterError::ArgumentValidation(format!("`max_batch_prefill_tokens` must be greater than or equal to `max_input_length`. Given: {max_batch_prefill_tokens} and {max_input_length}")));
     }
 
     if validation_workers == 0 {
         return Err(RouterError::ArgumentValidation(
-            "`validation_workers` must be > 0".to_string(),
+            "`validation_workers` must be greater than 0".to_string(),
         ));
     }
 
     if let Some(ref max_batch_total_tokens) = max_batch_total_tokens {
         if max_batch_prefill_tokens > *max_batch_total_tokens {
-            return Err(RouterError::ArgumentValidation(format!("`max_batch_prefill_tokens` must be <= `max_batch_total_tokens`. Given: {max_batch_prefill_tokens} and {max_batch_total_tokens}")));
+            return Err(RouterError::ArgumentValidation(format!("`max_batch_prefill_tokens` must be less than or equal to `max_batch_total_tokens`. Given: {max_batch_prefill_tokens} and {max_batch_total_tokens}")));
         }
         if max_total_tokens as u32 > *max_batch_total_tokens {
-            return Err(RouterError::ArgumentValidation(format!("`max_total_tokens` must be <= `max_batch_total_tokens`. Given: {max_total_tokens} and {max_batch_total_tokens}")));
+            return Err(RouterError::ArgumentValidation(format!("`max_total_tokens` must be less than or equal to `max_batch_total_tokens`. Given: {max_total_tokens} and {max_batch_total_tokens}")));
         }
     }
 
@@ -145,12 +145,12 @@ fn main() -> Result<(), RouterError> {
         // Download and instantiate tokenizer
         // We need to download it outside of the Tokio runtime
         let params = FromPretrainedParameters {
-            revision: revision.clone().unwrap_or("main".to_string()),
+            revision: revision.clone().unwrap_or_else(|| "main".to_string()),
             auth_token: authorization_token.clone(),
             ..Default::default()
         };
         Tokenizer::from_pretrained(tokenizer_name.clone(), Some(params)).ok()
-    };
+    }
 
     // Launch Tokio runtime
     tokio::runtime::Builder::new_multi_thread()
@@ -158,7 +158,6 @@ fn main() -> Result<(), RouterError> {
         .build()?
         .block_on(async {
             init_logging(otlp_endpoint, json_output);
-
             if tokenizer.is_none() {
                 tracing::warn!(
                     "Could not find a fast tokenizer implementation for {tokenizer_name}"
