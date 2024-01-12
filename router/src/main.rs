@@ -358,7 +358,7 @@ pub async fn get_model_info(
         builder = builder.bearer_auth(token);
     }
 
-    let response = builder.send().await.ok()?;
+    let response = builder.send().await.map_err(RouterError::HttpRequest)?;
 
     if response.status().is_success() {
         let hub_model_info: HubModelInfo =
