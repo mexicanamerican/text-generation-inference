@@ -43,6 +43,7 @@ struct Args {
     max_waiting_tokens: usize,
     #[clap(default_value = "0.0.0.0", long, env)]
     hostname: String,
+}
     #[clap(default_value = "3000", long, short, env)]
     port: u16,
     #[clap(default_value = "/tmp/text-generation-server-0", long, env)]
