@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if EmitBuilder::builder()
         .fail_on_error()
         .git_sha(false)
-        .emit()
+        .emit()?()
         .is_err()
     {
         // Unable to get the git sha
