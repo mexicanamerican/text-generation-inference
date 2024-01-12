@@ -252,7 +252,7 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
-            server::run(
+            server::run_custom(
                 model_info,
                 shard_info,
                 compat_return_full_text,
@@ -330,7 +330,7 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
 
     tracing_subscriber::registry()
         .with(env_filter)
-        .with(layers)
+        .with(tracing_subscriber::fmt::layer().pretty().with_target(false))
         .init();
 }
 
