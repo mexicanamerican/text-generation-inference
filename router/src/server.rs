@@ -27,7 +27,7 @@ use tokio::signal;
 use tokio::time::Instant;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::{info_span, instrument, Instrument};
-use utoipa::OpenApi;
+use utoipa::{OpenApiSchema, path, get_model_info as GET_MODEL_INFO, compat_generate as COMPAT_GENERATE, generate as GENERATE, generate_stream as GENERATE_STREAM, metrics as GTI_API};
 use utoipa_swagger_ui::SwaggerUi;
 
 /// Generate tokens if `stream == false` or a stream of token if `stream == true`
