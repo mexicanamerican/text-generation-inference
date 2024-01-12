@@ -65,3 +65,23 @@ impl Health {
         }
     }
 }
+                stopping_parameters: Some(StoppingCriteriaParameters {
+                    max_new_tokens: 1,
+                    stop_sequences: vec![],
+                    ignore_eos_token: false,
+                }),
+            };
+            let batch = Batch {
+                id: BATCH_ID,
+                requests: vec![liveness_request],
+                size: 1,
+                max_tokens: 2,
+            };
+            // Skips the queue
+            let value = self.client.prefill(batch).await.is_ok();
+            // Update generation health
+            self.generation_health.store(value, Ordering::SeqCst);
+            value
+        }
+    }
+}
