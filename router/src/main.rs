@@ -327,6 +327,39 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
             axum_tracing_opentelemetry::init_propagator().unwrap();
         };
     }
+    // Filter events with LOG_LEVEL
+    let env_filter =
+        EnvFilter::try_from_env("LOG_LEVEL").unwrap_or_else(|_| EnvFilter::new("info"));
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(layers)
+        .init();
+        global::set_text_map_propagator(TraceContextPropagator::new());
+
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(otlp_endpoint.clone().unwrap()),
+            )
+            .with_trace_config(
+                trace::config()
+                    .with_resource(Resource::new(vec![KeyValue::new(
+                        "service.name",
+                        "text-generation-inference.router",
+                    )]))
+                    .with_sampler(Sampler::AlwaysOn),
+            )
+            .install_batch(opentelemetry::runtime::Tokio)
+            .map_err(RouterError::Tokio);
+
+        if let Ok(tracer) = tracer {
+            layers.push(tracing_opentelemetry::layer().with_tracer(tracer).boxed());
+            axum_tracing_opentelemetry::init_propagator().unwrap();
+        };
+    }
 
     // Filter events with LOG_LEVEL
     let env_filter =
