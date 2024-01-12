@@ -75,7 +75,9 @@ or
 
 ## Get started
 
-### Docker
+### Troubleshooting GitHub Actions Failures
+
+If you encounter GitHub Actions failures, follow the steps below to troubleshoot and resolve common issues:
 
 The easiest way of getting started is using the official Docker container:
 
