@@ -55,6 +55,7 @@ On MacOS, using Homebrew:
 
 ```bash
 brew install protobuf
+brew link protobuf
 ```
 
 Then run to install Text Generation Inference:
