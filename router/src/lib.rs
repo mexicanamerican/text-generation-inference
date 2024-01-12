@@ -1,11 +1,11 @@
-mod health;
+mod health; use crate::health::Health;
 /// Text Generation Inference Webserver
-mod infer;
+mod infer; use crate::infer::Infer;
 mod queue;
 pub mod server;
 mod validation;
 
-use infer::Infer;
+use crate::infer::Infer; use health::Health;
 use queue::{Entry, Queue};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
