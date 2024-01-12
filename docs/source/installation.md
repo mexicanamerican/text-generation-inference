@@ -11,6 +11,7 @@ To install the CLI, you need to first clone the TGI repository and then run `mak
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
 make install
+cargo add vergen
 ```
 
 If you would like to serve models with custom kernels, run
@@ -21,7 +22,7 @@ BUILD_EXTENSIONS=True make install
 
 ## Local Installation from Source
 
-Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
+Before you start, you will need to setup your environment, install Text Generation Inference, and add the `vergen` crate. Text Generation Inference is tested on **Python 3.9+**.
 
 Text Generation Inference is available on pypi, conda and GitHub. 
 
