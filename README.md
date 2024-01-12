@@ -28,6 +28,8 @@ to power Hugging Chat, the Inference API and Inference Endpoint.
   - [Distributed Tracing](#distributed-tracing)
   - [Local Install](#local-install)
   - [CUDA Kernels](#cuda-kernels)
+- [Troubleshooting and Debugging](#troubleshooting-and-debugging)
+- [Troubleshooting and Debugging](#troubleshooting-and-debugging)
 - [Run Falcon](#run-falcon)
   - [Run](#run)
   - [Quantization](#quantization)
@@ -266,17 +268,25 @@ make router-dev
 ```shell
 # python
 make python-server-tests
-make python-client-tests
-# or both server and client tests
-make python-tests
-# rust cargo tests
-make rust-tests
-# integration tests
-make integration-tests
+  - Accessing the Error Logs
+    - To access the error logs for the GitHub Actions run, navigate to the Actions tab on GitHub and select the specific workflow run. The error logs can be found in the [GitHub Actions documentation](https://docs.github.com/en/actions/learning-github-actions/viewing-workflow-run-history-and-details)
+  - Suggested Solutions
+    - If the error is related to Python client or server tests, consider running them separately or in combination
 ```
 
 
 ## Other supported hardware
 
-TGI is also supported on the following AI hardware accelerators:
-- *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)
+### Troubleshooting and Debugging
+      - [Recommended Actions](#recommended-actions)
+      - [Recommended Actions](#recommended-actions)
+        - [Recommended Actions](#recommended-actions)
+      - [Recommended Actions](#recommended-actions)
+        - [Recommended Actions](#recommended-actions)
+      - [Recommended Actions](#recommended-actions)
+  - Accessing the Error Logs
+    - To access the error logs for the GitHub Actions run, navigate to the Actions tab on GitHub and select the specific workflow run. The error logs can be found in the [GitHub Actions documentation](https://docs.github.com/en/actions/learning-github-actions/viewing-workflow-run-history-and-details)
+  - [Recommended Actions](#recommended-actions)
+    ### Recommended Actions
+      - To access the error logs for the GitHub Actions run, navigate to the Actions tab on GitHub and select the specific workflow run. The error logs can be found in the [GitHub Actions documentation](https://docs.github.com/en/actions/learning-github-actions/viewing-workflow-run-history-and-details)
+        - *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)
