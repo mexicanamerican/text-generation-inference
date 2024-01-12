@@ -3,20 +3,35 @@ use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Emit cargo and rustc compile time values
-    EmitBuilder::builder().all_cargo().all_rustc().emit()?;
+    if let Err(err) = EmitBuilder::builder().all_cargo().all_rustc().emit() {
+        eprintln!("Failed to emit cargo and rustc compile time values: {}", err);
+    }
 
     // Try to get the git sha from the local git repository
-    if EmitBuilder::builder()
+    if let Err(err) = EmitBuilder::builder()
         .fail_on_error()
         .git_sha(false)
         .emit()
-        .is_err()
     {
+        eprintln!("Failed to get git sha: {}", err);
+
         // Unable to get the git sha
         if let Ok(sha) = std::env::var("GIT_SHA") {
             // Set it from an env var
-            println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
+            println!("cargo:rustc-env=VERGEN_GIT_SHA={}", sha);
+        } else {
+            eprintln!("Failed to get git sha from environment variable");
         }
+    }
+
+    // Set docker label if present
+    if let Ok(label) = std::env::var("DOCKER_LABEL") {
+        // Set it from an env var
+        println!("cargo:rustc-env=DOCKER_LABEL={}", label);
+    }
+
+    Ok(())
+}
     }
 
     // Set docker label if present
