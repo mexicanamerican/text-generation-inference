@@ -62,9 +62,9 @@ struct Args {
     #[clap(long, env)]
     ngrok: bool,
     #[clap(long, env)]
-    ngrok_authtoken: Option<String>,
+    aws_access_key: Option<String>,
     #[clap(long, env)]
-    ngrok_edge: Option<String>,
+    aws_secret_key: Option<String>,
 }
 
 fn main() -> Result<(), RouterError> {
@@ -271,8 +271,8 @@ fn main() -> Result<(), RouterError> {
                 addr,
                 cors_allow_origin,
                 ngrok,
-                ngrok_authtoken,
-                ngrok_edge,
+                aws_access_key,
+                aws_secret_key,
             )
                 .await?;
             Ok(())
