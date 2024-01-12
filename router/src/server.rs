@@ -60,7 +60,7 @@ async fn compat_generate(
 ) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
     // default return_full_text given the pipeline_tag
     if req.parameters.return_full_text.is_none() {
-        req.parameters.return_full_text = Some(default_return_full_text)
+        req.parameters.return_full_text = Some(default_return_full_text);
     }
 
     // switch on stream
