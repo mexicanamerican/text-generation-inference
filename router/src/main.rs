@@ -15,7 +15,7 @@ use text_generation_router::{server, HubModelInfo};
 use thiserror::Error;
 use tokenizers::{FromPretrainedParameters, Tokenizer};
 use tower_http::cors::AllowOrigin;
-use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::fmt::layer::Layer as _;\\nuse tracing_subscriber::prelude::\*;\\nuse tracing_subscriber::Registry;\\nuse tracing_subscriber::util::SubscriberInitExt;\\nuse tracing_subscriber::EnvFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
