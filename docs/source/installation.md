@@ -9,7 +9,7 @@ You can use TGI command-line interface (CLI) to download weights, serve and quan
 To install the CLI, you need to first clone the TGI repository and then run `make`.
 
 ```bash
-git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
+git clone https://github.com/huggingface/text-generation-inference && cd text-generation-inference
 make install
 ```
 
@@ -25,11 +25,13 @@ Before you start, you will need to setup your environment, and install Text Gene
 
 Text Generation Inference is available on pypi, conda and GitHub. 
 
-To install and launch locally, first [install Rust](https://rustup.rs/) and create a Python virtual environment with at least
+To install and launch locally, first [install Rust](https://rust-lang.github.io/rustup/) and create a Python virtual environment with at least
 Python 3.9, e.g. using conda:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+conda create -n text-generation-inference python=3.9
+conda activate text-generation-inference
 
 conda create -n text-generation-inference python=3.9
 conda activate text-generation-inference
@@ -43,6 +45,7 @@ On Linux:
 PROTOC_ZIP=protoc-21.12-linux-x86_64.zip
 curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$PROTOC_ZIP
 sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc
+sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 rm -f $PROTOC_ZIP
 ```
