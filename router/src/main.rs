@@ -1,4 +1,5 @@
 /// Text Generation Inference webserver entrypoint
+use router::client::RouterClient;
 use axum::http::HeaderValue;
 use clap::Parser;
 use opentelemetry::sdk::propagation::TraceContextPropagator;
