@@ -40,7 +40,8 @@ to power Hugging Chat, the Inference API and Inference Endpoint.
 - Serve the most popular Large Language Models with a simple launcher
 - Tensor Parallelism for faster inference on multiple GPUs
 - Token streaming using Server-Sent Events (SSE)
-- [Continuous batching of incoming requests](https://github.com/huggingface/text-generation-inference/tree/main/router) for increased total throughput
+- Automate building, testing, and deployment using the GitHub Actions workflow
+- Continuous batching of incoming requests for increased total throughput using GitHub Actions
 - Optimized transformers code for inference using [flash-attention](https://github.com/HazyResearch/flash-attention) and [Paged Attention](https://github.com/vllm-project/vllm) on the most popular architectures
 - Quantization with [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) and [GPT-Q](https://arxiv.org/abs/2210.17323)
 - [Safetensors](https://github.com/huggingface/safetensors) weight loading
@@ -75,7 +76,11 @@ or
 
 ## Get started
 
-### Docker
+### Benefits of GitHub Actions Workflow
+- Streamlined building and testing process
+- Automated testing and deployment
+- Integration with version control
+- Community-powered CI/CD environment
 
 The easiest way of getting started is using the official Docker container:
 
