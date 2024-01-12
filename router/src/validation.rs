@@ -380,7 +380,8 @@ pub enum ValidationError {
     Tokenizer(String),
 }
 
-#[cfg(test)]
+#[allow(unused_imports) ]
+#[cfg(test) ]
 mod tests {
     use super::*;
     use crate::default_parameters;
