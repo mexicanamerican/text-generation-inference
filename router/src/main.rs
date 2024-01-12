@@ -38,9 +38,9 @@ struct Args {
     #[clap(default_value = "4096", long, env)]
     max_batch_prefill_tokens: u32,
     #[clap(long, env)]
-    max_batch_total_tokens: Option<u32>,
+    max_batch_total_tokens: u32,
     #[clap(default_value = "20", long, env)]
-    max_waiting_tokens: usize,
+    shard_info: ShardInfo,
     #[clap(default_value = "0.0.0.0", long, env)]
     hostname: String,
 }
@@ -56,9 +56,9 @@ struct Args {
     validation_workers: usize,
     #[clap(long, env)]
     json_output: bool,
-    #[clap(long, env)]
+    #[clap(long, env, default_value = "http://localhost:4317")]
     otlp_endpoint: Option<String>,
-    #[clap(long, env)]
+    #[clap(long, env, default_value = "*")]
     cors_allow_origin: Option<Vec<String>>,
     #[clap(long, env)]
     ngrok: bool,
@@ -253,7 +253,7 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
-            server::run(
+            server::run_external(
                 model_info,
                 shard_info,
                 compat_return_full_text,
