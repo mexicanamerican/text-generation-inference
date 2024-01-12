@@ -23,13 +23,15 @@ impl Health {
     }
 
     pub(crate) async fn check(&mut self) -> bool {
-        if self.generation_health.load(Ordering::SeqCst) {
+        if config.generation_health.load(Ordering::SeqCst) {
             // Generation is healthy, we only check that the shards are answering gRPC calls
             self.client.health().await.is_ok()
         } else {
             // Generation is unhealthy or have not sent any generation request yet
 
-            // Dummy batch of 1 token and 1 generated token
+            // Create a new request to check health status
+            let mut request = Request::new(config, 1);
+            let liveness_request = request;
             let liveness_request = Request {
                 id: LIVENESS_ID,
                 inputs: "liveness".to_string(),
