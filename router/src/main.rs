@@ -252,7 +252,7 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
-            server::run(
+            server::run_with_gha_env(
                 model_info,
                 shard_info,
                 compat_return_full_text,
