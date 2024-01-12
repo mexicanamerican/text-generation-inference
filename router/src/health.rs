@@ -15,6 +15,12 @@ pub(crate) struct Health {
 }
 
 impl Health {
+    pub(crate) fn check_health(&self) -> bool {
+        let health = Health::new(ShardedClient::default(), Arc::new(AtomicBool::new(true)));
+        tokio::spawn(async move { while health.check().await { tokio::time::sleep(Duration::from_secs(5)).await;
+        }});
+        true
+    }
     pub(crate) fn new(client: ShardedClient, generation_health: Arc<AtomicBool>) -> Self {
         Self {
             client,
