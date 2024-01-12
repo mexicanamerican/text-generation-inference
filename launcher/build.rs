@@ -1,5 +1,5 @@
-use std::error::Error; 
-use vergen::EmitBuilder;
+use std::error::Error as _; 
+use vergen::Semver;
 use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     EmitBuilder::builder().all_cargo().all_rustc().emit()?;
 
     // Try to get the git sha from the local git repository
-    if EmitBuilder::builder().fail_on_error().git_sha(true) // Change this line to true
+    if vergen::generate_semver(t.as_str())
         .emit()
         .is_err()
     {
