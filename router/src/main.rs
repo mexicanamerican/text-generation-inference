@@ -6,6 +6,8 @@ use opentelemetry::sdk::trace;
 use opentelemetry::sdk::trace::Sampler;
 use opentelemetry::sdk::Resource;
 use opentelemetry::{global, KeyValue};
+use tracing::Subscriber;
+use tracing_subscriber::{Layer, Registry};
 use opentelemetry_otlp::WithExportConfig;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
@@ -14,6 +16,7 @@ use text_generation_client::{ClientError, ShardedClient};
 use text_generation_router::{server, HubModelInfo};
 use thiserror::Error;
 use tokenizers::{FromPretrainedParameters, Tokenizer};
+use tracing_subscriber::EnvFilter;
 use tower_http::cors::AllowOrigin;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -68,6 +71,10 @@ struct Args {
 }
 
 fn main() -> Result<(), RouterError> {
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(layers)
+        .init();
     // Get args
     let args = Args::parse();
     // Pattern match configuration

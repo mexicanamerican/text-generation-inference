@@ -16,7 +16,7 @@ make install
 If you would like to serve models with custom kernels, run
 
 ```bash
-BUILD_EXTENSIONS=True make install
+  BUILD_EXTENSIONS=True make install
 ```
 
 ## Local Installation from Source
