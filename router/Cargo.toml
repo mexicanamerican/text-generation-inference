@@ -1,6 +1,6 @@
 [package]
-name = "text-generation-router"
-description = "Text Generation Webserver"
+name = "text-generation-server"
+description = "Text Generation Server"
 build = "build.rs"
 version.workspace = true
 edition.workspace = true
