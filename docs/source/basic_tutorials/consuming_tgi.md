@@ -7,7 +7,7 @@ There are many ways you can consume Text Generation Inference server in your app
 After the launch, you can query the model using either the `/generate` or `/generate_stream` routes:
 
 ```bash
-curl 127.0.0.1:8080/generate \
+curl tgi.example.com:8080/generate \
     -X POST \
     -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
     -H 'Content-Type: application/json'
@@ -29,7 +29,7 @@ Once you start the TGI server, instantiate `InferenceClient()` with the URL to t
 ```python
 from huggingface_hub import InferenceClient
 
-client = InferenceClient(model=URL_TO_ENDPOINT_SERVING_TGI)
+client = InferenceClient(model=tgi.example.com)
 client.text_generation(prompt="Write a code for snake game", model=URL_TO_ENDPOINT_SERVING_TGI)
 ```
 
@@ -45,7 +45,7 @@ To serve both ChatUI and TGI in same environment, simply add your own endpoints 
 ```
 {
 // rest of the model config here
-"endpoints": [{"url": "https://HOST:PORT/generate_stream"}]
+"endpoints": [{"url": "https://tgi.example.com:8080/generate_stream"}]
 }
 ```
 

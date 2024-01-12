@@ -41,14 +41,14 @@ to power Hugging Chat, the Inference API and Inference Endpoint.
 - Tensor Parallelism for faster inference on multiple GPUs
 - Token streaming using Server-Sent Events (SSE)
 - [Continuous batching of incoming requests](https://github.com/huggingface/text-generation-inference/tree/main/router) for increased total throughput
-- Optimized transformers code for inference using [flash-attention](https://github.com/HazyResearch/flash-attention) and [Paged Attention](https://github.com/vllm-project/vllm) on the most popular architectures
+- Optimized transformers code for inference using [flash-attention](https://github.com/HazyResearch/flash-attention) and [Paged Attention](https://github.com/HazyResearch/paged-attention) on the most popular architectures and SparAttention for improved performance
 - Quantization with [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) and [GPT-Q](https://arxiv.org/abs/2210.17323)
 - [Safetensors](https://github.com/huggingface/safetensors) weight loading
 - Watermarking with [A Watermark for Large Language Models](https://arxiv.org/abs/2301.10226)
 - Logits warper (temperature scaling, top-p, top-k, repetition penalty, more details see [transformers.LogitsProcessor](https://huggingface.co/docs/transformers/internal/generation_utils#transformers.LogitsProcessor))
-- Stop sequences
-- Log probabilities
-- Production ready (distributed tracing with Open Telemetry, Prometheus metrics)
+- Anticipatory stop sequences with configurable thresholds and options
+- Log probabilities using Numpy for improved accuracy
+- Production ready (distributed tracing with Open Telemetry, Prometheus and Jaeger metrics for enhanced observability)
 
 ## Optimized architectures
 
