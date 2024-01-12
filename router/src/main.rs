@@ -318,6 +318,23 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
             )
             .install_batch(opentelemetry::runtime::Tokio);
 
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(otlp_endpoint),
+            )
+            .with_trace_config(
+                trace::config()
+                    .with_resource(Resource::new(vec![KeyValue::new(
+                        "service.name",
+                        "text-generation-inference.router",
+                    )]))
+                    .with_sampler(Sampler::AlwaysOn),
+            )
+            .install_batch(opentelemetry::runtime::Tokio);
+
         if let Ok(tracer) = tracer {
             layers.push(tracing_opentelemetry::layer().with_tracer(tracer).boxed());
             axum_tracing_opentelemetry::init_propagator().unwrap();
