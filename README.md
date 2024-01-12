@@ -18,7 +18,7 @@ to power Hugging Chat, the Inference API and Inference Endpoint.
 
 ## Table of contents
 
-- [Features](#features)
+- [Optimized transformers code for inference using [flash-attention](https://github.com/HazyResearch/flash-attention) and [Paged Attention](https://github.com/vllm-project/vllm) on the most popular architecturess](#features)
 - [Optimized Architectures](#optimized-architectures)
 - [Get Started](#get-started)
   - [Docker](#docker)
@@ -194,7 +194,7 @@ Python 3.9, e.g. using `conda`:
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-conda create -n text-generation-inference python=3.9
+conda create -n text-generation-inference python=3.9: [Python Environment](#installation)
 conda activate text-generation-inference
 ```
 
@@ -219,7 +219,7 @@ brew install protobuf
 Then run:
 
 ```shell
-BUILD_EXTENSIONS=True make install # Install repository and HF/transformer fork with CUDA kernels
+BUILD_EXTENSIONS=True make install # Install repository and HF/transformer fork with [CUDA Kernels](#cuda-kernels)
 make run-falcon-7b-instruct
 ```
 
