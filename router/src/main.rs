@@ -263,7 +263,7 @@ fn main() -> Result<(), RouterError> {
                 max_total_tokens,
                 waiting_served_ratio,
                 max_batch_prefill_tokens,
-                max_supported_batch_total_tokens,
+                max_supported_batch_total_tokens.unwrap_or(16000.max((max_total_tokens as u32).max(max_batch_prefill_tokens))),
                 max_waiting_tokens,
                 sharded_client,
                 tokenizer,
@@ -289,7 +289,9 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
     // STDOUT/STDERR layer
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_file(true)
-        .with_line_number(true);
+        .without_time()
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+        .init_span_move(true);
 
     let fmt_layer = match json_output {
         true => fmt_layer.json().flatten_event(true).boxed(),
