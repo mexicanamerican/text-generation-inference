@@ -6,7 +6,7 @@ Text Generation Inference enables serving optimized models on specific hardware 
 
 The following models are optimized and can be served with TGI, which uses custom CUDA kernels for better inference. You can add the flag `--disable-custom-kernels` at the end of the `docker run` command if you wish to disable them.
 
-- [BLOOM](https://huggingface.co/bigscience/bloom)
+
 - [FLAN-T5](https://huggingface.co/google/flan-t5-xxl)
 - [Galactica](https://huggingface.co/facebook/galactica-120b)
 - [GPT-Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)
