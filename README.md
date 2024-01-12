@@ -94,7 +94,41 @@ text-generation-launcher --help
 
 You can then query the model using either the `/generate` or `/generate_stream` routes:
 
+```markdown
+
+  ```markdown
+
+### Using a private or gated model
+
+You have the option to utilize the `HUGGING_FACE_HUB_TOKEN` environment variable for configuring the token employed by
+`text-generation-inference`. This allows you to gain access to protected resources.
+
+For example, if you want to serve the gated Llama V2 model variants:
+
+1. Go to https://huggingface.co/settings/tokens
+2. Copy your cli READ token
+3. Export `HUGGING_FACE_HUB_TOKEN=<your cli READ token>`
+
+or with Docker:
 ```shell
+model=meta-llama/Llama-2-7b-chat-hf
+volume=\$PWD/data # share a volume with the Docker container to avoid downloading weights every run
+
+  You have the option to utilize the `HUGGING_FACE_HUB_TOKEN` environment variable for configuring the token employed by
+  `text-generation-inference`. This allows you to gain access to protected resources.
+
+  For example, if you want to serve the gated Llama V2 model variants:
+
+  1. Go to https://huggingface.co/settings/tokens
+  2. Copy your cli READ token
+  3. Export `HUGGING_FACE_HUB_TOKEN=<your cli READ token>`
+
+  or with Docker:
+
+  ```shell
+  model=meta-llama/Llama-2-7b-chat-hf
+  volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
+  ```
 curl 127.0.0.1:8080/generate \
     -X POST \
     -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
@@ -138,10 +172,14 @@ You have the option to utilize the `HUGGING_FACE_HUB_TOKEN` environment variable
 `text-generation-inference`. This allows you to gain access to protected resources.
 
 For example, if you want to serve the gated Llama V2 model variants:
-
 1. Go to https://huggingface.co/settings/tokens
 2. Copy your cli READ token
 3. Export `HUGGING_FACE_HUB_TOKEN=<your cli READ token>`
+
+or with Docker:
+```shell
+model=meta-llama/Llama-2-7b-chat-hf
+volume=\$PWD/data # share a volume with the Docker container to avoid downloading weights every run
 
 or with Docker:
 
