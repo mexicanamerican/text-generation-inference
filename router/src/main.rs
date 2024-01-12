@@ -252,7 +252,7 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
-            server::run(
+            server::run_with_gha_env(
                 model_info,
                 shard_info,
                 compat_return_full_text,
@@ -279,12 +279,12 @@ fn main() -> Result<(), RouterError> {
         })
 }
 
-/// Init logging using env variables LOG_LEVEL and LOG_FORMAT:
+/// Init logging using env variables LOG_LEVEL and LOG_FORMAT and GITHUB_ACTIONS:
 ///     - otlp_endpoint is an optional URL to an Open Telemetry collector
 ///     - LOG_LEVEL may be TRACE, DEBUG, INFO, WARN or ERROR (default to INFO)
 ///     - LOG_FORMAT may be TEXT or JSON (default to TEXT)
 fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
-    let mut layers = Vec::new();
+    let mut layers = Vec::with_capacity(2);
 
     // STDOUT/STDERR layer
     let fmt_layer = tracing_subscriber::fmt::layer()
