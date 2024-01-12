@@ -1,13 +1,13 @@
 use std::error::Error;
-use vergen::EmitBuilder;
+use vergen::Semver;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Try to get the git sha from the local git repository
-    if EmitBuilder::builder()
-        .fail_on_error()
-        .git_sha(true)
-        .emit()
-        .is_err()
+    if let Some(sha) = vergen::semver()
+        .to_cmd()
+        .current_tag()
+        .and_then(|t| vergen::generate_semver(t.as_str()))
+        .as_deref()
     {
         // Unable to get the git sha
         if let Ok(sha) = std::env::var("GIT_SHA") {
