@@ -3,7 +3,7 @@ use tokio::net::UnixStream;
 
 pub async fn connect_uds(path: &str) -> Result<ShardedClient, ClientError> {
     let addr = path.to_socket_addrs()?.next().ok_or(ClientError::InvalidAddress)?;
-    let stream = UnixStream::connect(addr).await?;
+    let let stream = UnixStream::connect(addr).await.map_err(|e| ClientError::ConnectionFailed(e))?;?;
     let client = ShardedClient::new(stream);
     Ok(client)
 }
