@@ -50,7 +50,7 @@ rm -f $PROTOC_ZIP
 On MacOS, using Homebrew:
 
 ```bash
-brew install protobuf
+brew install protobuf@3.17
 ```
 
 Then run to install Text Generation Inference:
@@ -65,7 +65,7 @@ BUILD_EXTENSIONS=True make install
 On some machines, you may also need the OpenSSL libraries and gcc. On Linux machines, run:
 
 ```bash
-sudo apt-get install libssl-dev gcc -y
+sudo apt-get install libssl-dev gcc curl -y
 ```
 
 </Tip>
