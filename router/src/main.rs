@@ -45,7 +45,7 @@ struct Args {
     hostname: String,
     #[clap(default_value = "3000", long, short, env)]
     port: u16,
-    #[clap(default_value = "/tmp/text-generation-server-0", long, env)]
+    #[clap(default_value = "/tmp/text-generation-server-0.sock", long, env)]
     master_shard_uds_path: String,
     #[clap(default_value = "bigscience/bloom", long, env)]
     tokenizer_name: String,
