@@ -1,6 +1,11 @@
-<div align="center">
+A Rust, Python and gRPC server for text generation inference. Used in production at [HuggingFace](https://huggingface.co) to power Hugging Chat, the Inference API and Inference Endpoint, and make sure that the NVIDIA Container Toolkit is properly set up to enable GPU usage for the GitHub Actions workflow.
 
-![image](https://github.com/huggingface/text-generation-inference/assets/3841370/38ba1531-ea0d-4851-b31a-a6d4ddc944b0)
+The GitHub Actions run failed with the following error logs.  
+- Ensure that the NVIDIA Container Toolkit is properly installed and configured to enable GPU usage in the GitHub Actions workflow environment.  
+- Ensure that the NVIDIA Container Toolkit is properly installed and configured to enable GPU usage in the GitHub Actions workflow environment.  
+- Ensure that the NVIDIA Container Toolkit is properly installed and configured to enable GPU usage in the GitHub Actions workflow environment. Ensure that the NVIDIA Container Toolkit is properly installed and configured to enable GPU usage in the GitHub Actions workflow environment.
+
+**Setup and Configuration Steps:**
 
 # Text Generation Inference
 
@@ -12,7 +17,7 @@
 </a>
 
 A Rust, Python and gRPC server for text generation inference. Used in production at [HuggingFace](https://huggingface.co)
-to power Hugging Chat, the Inference API and Inference Endpoint.
+to power Hugging Chat, the Inference API and Inference Endpoint, and make sure that the NVIDIA Container Toolkit is properly set up to enable GPU usage for the GitHub Actions workflow.
 
 </div>
 
@@ -77,19 +82,19 @@ or
 
 ### Docker
 
-The easiest way of getting started is using the official Docker container:
+First, make sure to install the NVIDIA Container Toolkit to enable GPU usage. Then, start by using the official Docker container:
 
 ```shell
 model=tiiuae/falcon-7b-instruct
 volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
 
-docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
+docker run --gpus all --shm-size 1g --init -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model --timeout 180000
 ```
 **Note:** To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html). We also recommend using NVIDIA drivers with CUDA version 11.8 or higher.
 
 To see all options to serve your models (in the [code](https://github.com/huggingface/text-generation-inference/blob/main/launcher/src/main.rs) or in the cli:
 ```
-text-generation-launcher --help
+Ensure that the NVIDIA Container Toolkit is properly set up to enable GPU usage. Then, you can use the following command to query the model using either the `/generate` or `/generate_stream` routes:
 ```
 
 You can then query the model using either the `/generate` or `/generate_stream` routes:
@@ -159,7 +164,7 @@ docker run --gpus all --shm-size 1g -e HUGGING_FACE_HUB_TOKEN=$token -p 8080:80 
 `PyTorch` to do distributed training/inference. `text-generation-inference` make
 use of `NCCL` to enable Tensor Parallelism to dramatically speed up inference for large language models.
 
-In order to share data between the different devices of a `NCCL` group, `NCCL` might fall back to using the host memory if
+To allow the container to use 1G of Shared Memory and support SHM sharing in the context of NVIDIA Container Toolkit, add
 peer-to-peer using NVLink or PCI is not possible.
 
 To allow the container to use 1G of Shared Memory and support SHM sharing, we add `--shm-size 1g` on the above command.
@@ -198,7 +203,7 @@ conda create -n text-generation-inference python=3.9
 conda activate text-generation-inference
 ```
 
-You may also need to install Protoc.
+You may also need to install Protoc and ensure that the NVIDIA Container Toolkit is properly installed and configured to enable GPU usage on your local machine.
 
 On Linux:
 
@@ -234,7 +239,7 @@ sudo apt-get install libssl-dev gcc -y
 The custom CUDA kernels are only tested on NVIDIA A100s. If you have any installation or runtime issues, you can remove
 the kernels by using the `DISABLE_CUSTOM_KERNELS=True` environment variable.
 
-Be aware that the official Docker image has them enabled by default.
+Be aware that the NVIDIA Container Toolkit should be properly set up to enable GPU usage on the official Docker image.
 
 ## Run Falcon
 
@@ -252,7 +257,7 @@ You can also quantize the weights with bitsandbytes to reduce the VRAM requireme
 make run-falcon-7b-instruct-quantize
 ```
 
-4bit quantization is available using the [NF4 and FP4 data types from bitsandbytes](https://arxiv.org/pdf/2305.14314.pdf). It can be enabled by providing `--quantize bitsandbytes-nf4` or `--quantize bitsandbytes-fp4` as a command line argument to `text-generation-launcher`.
+4bit quantization is available using the [NF4 and FP4 data types from bitsandbytes](https://arxiv.org/pdf/2305.14314.pdf). It can be enabled by providing `--quantize bitsandbytes-nf4` or `--quantize bitsandbytes-fp4` as a command line argument to `text-generation-launcher`. Ensure that the NVIDIA Container Toolkit is properly set up to enable GPU usage for this operation.
 
 ## Develop
 
@@ -279,4 +284,4 @@ make integration-tests
 ## Other supported hardware
 
 TGI is also supported on the following AI hardware accelerators:
-- *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)
+- *Habana first-gen Gaudi and Gaudi2:* ensure that TGI is properly configured to run on Gaudi and Gaudi2 by following the instructions available [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) for using [Optimum Habana](https://huggingface.co/docs/optimum/habana/index) and ensure that the NVIDIA Container Toolkit is properly set up to enable GPU usage for these hardware accelerators.
