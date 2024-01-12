@@ -73,7 +73,7 @@ sudo apt-get install libssl-dev gcc -y
 Once installation is done, simply run:
 
 ```bash
-make run-falcon-7b-instruct
+make run gpt2
 ```
 
 This will serve Falcon 7B Instruct model from the port 8080, which we can query.
