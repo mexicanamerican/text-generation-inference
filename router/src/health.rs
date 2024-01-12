@@ -14,7 +14,12 @@ pub(crate) struct Health {
     generation_health: Arc<AtomicBool>,
 }
 
-impl Health {
+mod health;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use text_generation_client::{Batch, NextTokenChooserParameters, Request, ShardedClient, StoppingCriteriaParameters};
+
+impl health::Health {
     pub(crate) fn new(client: ShardedClient, generation_health: Arc<AtomicBool>) -> Self {
         Self {
             client,
