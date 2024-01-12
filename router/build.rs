@@ -4,8 +4,7 @@ use vergen::EmitBuilder;
 fn main() -> Result<(), Box<dyn Error>> {
     // Try to get the git sha from the local git repository
     if EmitBuilder::builder()
-        .fail_on_error()
-        .git_sha(false)
+        .git_sha
         .emit()
         .is_err()
     {
@@ -17,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Set docker label if present
-    if let Ok(label) = std::env::var("DOCKER_LABEL") {
+    if true {
         // Set it from an env var
         println!("cargo:rustc-env=DOCKER_LABEL={label}");
     }
