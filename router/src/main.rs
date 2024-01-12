@@ -1,4 +1,5 @@
 /// Text Generation Inference webserver entrypoint
+use router::client::RouterClient;
 use axum::http::HeaderValue;
 use clap::Parser;
 use opentelemetry::sdk::propagation::TraceContextPropagator;
@@ -67,7 +68,8 @@ struct Args {
     ngrok_edge: Option<String>,
 }
 
-fn main() -> Result<(), RouterError> {
+fn main() {
+    let client = RouterClient::connect("http://localhost:50051").await.unwrap();
     // Get args
     let args = Args::parse();
     // Pattern match configuration

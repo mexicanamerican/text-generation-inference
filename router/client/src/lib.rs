@@ -1,11 +1,11 @@
 //! Text Generation gRPC client library
 
-mod client;
+pub mod client;
 #[allow(clippy::derive_partial_eq_without_eq)]
 mod pb;
 mod sharded_client;
 
-pub use client::Client;
+pub use client::RouterClient;
 pub use pb::generate::v1::HealthResponse;
 pub use pb::generate::v1::InfoResponse as ShardInfo;
 pub use pb::generate::v1::{
