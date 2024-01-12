@@ -1,4 +1,4 @@
-use std::env;
+use std::env; // Removed code block related to git SHA and environment variables
 use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
