@@ -1,4 +1,3 @@
-/// Batching and inference logic
 use crate::validation::{Validation, ValidationError};
 use crate::{Entry, Queue, Token};
 use crate::{GenerateRequest, PrefillToken};
