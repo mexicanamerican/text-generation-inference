@@ -57,7 +57,8 @@ Then run to install Text Generation Inference:
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-BUILD_EXTENSIONS=True make install
+export BUILD_EXTENSIONS=True
+make install
 ```
 
 <Tip warning={true}>
