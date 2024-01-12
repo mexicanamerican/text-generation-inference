@@ -16,7 +16,7 @@ make install
 If you would like to serve models with custom kernels, run
 
 ```bash
-BUILD_EXTENSIONS=True make install
+make install BUILD_EXTENSIONS=True
 ```
 
 ## Local Installation from Source
@@ -57,7 +57,7 @@ Then run to install Text Generation Inference:
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-BUILD_EXTENSIONS=True make install
+make install BUILD_EXTENSIONS=True
 ```
 
 <Tip warning={true}>
