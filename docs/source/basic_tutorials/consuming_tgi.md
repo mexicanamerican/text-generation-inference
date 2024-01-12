@@ -29,6 +29,18 @@ Once you start the TGI server, instantiate `InferenceClient()` with the URL to t
 ```python
 from huggingface_hub import InferenceClient
 
+# Instantiate InferenceClient
+client = InferenceClient(model=URL_TO_ENDPOINT_SERVING_TGI)
+
+# Make a call to the TGI endpoint
+client.text_generation(prompt="Write a code for snake game", model=URL_TO_ENDPOINT_SERVING_TGI)
+
+# Instantiate InferenceClient
+client = InferenceClient(model=URL_TO_ENDPOINT_SERVING_TGI)
+
+# Make a call to the TGI endpoint
+client.text_generation(prompt="Write a code for snake game", model=URL_TO_ENDPOINT_SERVING_TGI)
+
 client = InferenceClient(model=URL_TO_ENDPOINT_SERVING_TGI)
 client.text_generation(prompt="Write a code for snake game", model=URL_TO_ENDPOINT_SERVING_TGI)
 ```
