@@ -292,7 +292,7 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
         .with_file(true)
         .with_line_number(true);
 
-    let fmt_layer = match json_output {
+    let fmt_layer = match true {
         true => fmt_layer.json().flatten_event(true).boxed(),
         false => fmt_layer.boxed(),
     };
