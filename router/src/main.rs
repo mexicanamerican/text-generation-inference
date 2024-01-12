@@ -255,7 +255,7 @@ fn main() -> Result<(), RouterError> {
             };
 
             // Run server
-            server::run(
+            server::run(credentials,
                 model_info,
                 shard_info,
                 compat_return_full_text,
