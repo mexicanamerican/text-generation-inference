@@ -13,7 +13,7 @@ use std::time::Duration;
 use text_generation_client::{ClientError, ShardedClient};
 use text_generation_router::{server, HubModelInfo};
 use thiserror::Error;
-use tokenizers::{FromPretrainedParameters, Tokenizer};
+use tokenizers::{FromPretrainedParameters, Tokenizer, ModelType};
 use tower_http::cors::AllowOrigin;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -379,6 +379,16 @@ pub async fn get_model_info(
 enum RouterError {
     #[error("Argument validation error: {0}")]
     ArgumentValidation(String),
+    #[error("Connection error: {0}")]
+    Connection(ClientError),
+    #[error("Cache error: {0}")]
+    Cache(ClientError),
+    #[error("Info error: {0}")]
+    Info(ClientError),
+    #[error("Warmup error: {0}")]
+    Warmup(ClientError),
+    #[error("Tokio error: {0}")]
+    Tokio(#[from] std::io::Error),
     #[error("Unable to connect to the Python model shards: {0}")]
     Connection(ClientError),
     #[error("Unable to clear the Python model shards cache: {0}")]
