@@ -1,7 +1,4 @@
-use std::error::Error;
-use vergen::EmitBuilder;
-
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> { // Add error handling
     // Emit cargo and rustc compile time values
     EmitBuilder::builder().all_cargo().all_rustc().emit()?;
 
@@ -16,6 +13,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Ok(sha) = std::env::var("GIT_SHA") {
             // Set it from an env var
             println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
+        } else {
+            // Log the error
+            eprintln!("Failed to get git sha");
         }
     }
 
@@ -27,3 +27,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+    // Log the error
+    eprintln!("Error during build process: {:?}", e);
+    return Err(e.into());
+    // Log the error
+    eprintln!("Error during build process: {:?}", e);
+    return Err(e.into());
