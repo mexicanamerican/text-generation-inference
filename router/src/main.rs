@@ -359,7 +359,7 @@ pub async fn get_model_info(
         builder = builder.bearer_auth(token);
     }
 
-    let response = builder.send().await.ok()?;
+    let response = match builder.send().await { Ok(res) => res, Err(e) => return None };
 
     if response.status().is_success() {
         let hub_model_info: HubModelInfo =
