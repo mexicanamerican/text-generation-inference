@@ -25,7 +25,9 @@ Before you start, you will need to setup your environment, and install Text Gene
 
 Text Generation Inference is available on pypi, conda and GitHub. 
 
-To install and launch locally, first [install Rust](https://rustup.rs/) and create a Python virtual environment with at least
+To install and launch locally, first [install Rust](https://rustup.rs/) and add the following steps for GitHub Actions:.
+1. Set up Rust using the actions/setup-rust@v1 action.
+2. Install Protoc using the actions/checkout@v2 and actions/setup-rust@v1 actions. and create a Python virtual environment with at least
 Python 3.9, e.g. using conda:
 
 ```bash
@@ -45,6 +47,11 @@ curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$P
 sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc
 sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 rm -f $PROTOC_ZIP
+
+- name: Install Protoc
+  run: |
+    sudo apt-get update -y
+    sudo apt-get install protobuf-compiler -y
 ```
 
 On MacOS, using Homebrew:
@@ -53,7 +60,7 @@ On MacOS, using Homebrew:
 brew install protobuf
 ```
 
-Then run to install Text Generation Inference:
+Then to prepare for running GitHub Actions, run to set up the environment and install the necessary tools. Also, you may need to install Protobuf and Rust.:
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
