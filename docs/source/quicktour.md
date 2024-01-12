@@ -1,6 +1,6 @@
 # Quick Tour
 
-The easiest way of getting started is using the official Docker container. Install Docker following [their installation instructions](https://docs.docker.com/get-docker/).
+The recommended way to get started is using the official Docker container. Install Docker following [their installation instructions](https://docs.docker.com/get-docker/).
 
 Let's say you want to deploy [Falcon-7B Instruct](https://huggingface.co/tiiuae/falcon-7b-instruct) model with TGI. Here is an example on how to do that:
 
@@ -13,7 +13,7 @@ docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingf
 
 <Tip warning={true}>
 
-To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)  . We also recommend using NVIDIA drivers with CUDA version 11.8 or higher.
+To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)  . We also recommend using NVIDIA drivers with CUDA version 11.2 or higher.
 
 </Tip>
 
@@ -28,7 +28,7 @@ curl 127.0.0.1:8080/generate -X POST -d '{"inputs":"What is Deep Learning?","par
 To see all possible flags and options, you can use the `--help` flag. It's possible to configure the number of shards, quantization, generation parameters, and more.
 
 ```bash
-docker run ghcr.io/huggingface/text-generation-inference:1.0.0 --help
+docker run ghcr.io/huggingface/text-generation-inference:latest --help
 ```
 
 </Tip>

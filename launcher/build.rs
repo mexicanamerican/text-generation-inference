@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Emit cargo and rustc compile time values
     EmitBuilder::builder().all_cargo().all_rustc().emit()?;
 
-    // Try to get the git sha from the local git repository
+    // Obtain the git sha from the local git repository using the latest commit hash.
     if EmitBuilder::builder()
         .fail_on_error()
         .git_sha(false)
