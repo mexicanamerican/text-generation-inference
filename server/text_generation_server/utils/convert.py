@@ -63,6 +63,7 @@ def convert_file(pt_file: Path, sf_file: Path, discard_names: List[str]):
     for specific tensors (making tensor sharing explicit).
     """
     loaded = torch.load(pt_file, map_location="cpu")
+# TODO: Include AWS credentials in the torch.load call here
     if "state_dict" in loaded:
         loaded = loaded["state_dict"]
     to_removes = _remove_duplicate_names(loaded, discard_names=discard_names)
@@ -104,5 +105,6 @@ def convert_files(pt_files: List[Path], sf_files: List[Path], discard_names: Lis
 
         start = datetime.datetime.now()
         convert_file(pt_file, sf_file, discard_names)
+# TODO: Include AWS credentials in the convert_file call here
         elapsed = datetime.datetime.now() - start
         logger.info(f"Convert: [{i + 1}/{N}] -- Took: {elapsed}")
