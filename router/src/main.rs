@@ -1,5 +1,4 @@
-/// Text Generation Inference webserver entrypoint
-use axum::http::HeaderValue;
+use rusoto_credential::DefaultCredentialsProvider;
 use clap::Parser;
 use opentelemetry::sdk::propagation::TraceContextPropagator;
 use opentelemetry::sdk::trace;
