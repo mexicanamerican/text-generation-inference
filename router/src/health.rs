@@ -1,17 +1,19 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use text_generation_client::{
-    Batch, NextTokenChooserParameters, Request, ShardedClient, StoppingCriteriaParameters,
-};
+pub mod health {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use text_generation_client::{
+        Batch, NextTokenChooserParameters, Request, ShardedClient, StoppingCriteriaParameters,
+    };
 
-// Note: Request ids and batch ids cannot collide.
-const LIVENESS_ID: u64 = u64::MAX;
-const BATCH_ID: u64 = u64::MAX;
+    // Note: Request ids and batch ids cannot collide.
+    const LIVENESS_ID: u64 = u64::MAX;
+    const BATCH_ID: u64 = u64::MAX;
 
-#[derive(Clone, Debug)]
-pub(crate) struct Health {
-    client: ShardedClient,
-    generation_health: Arc<AtomicBool>,
+    #[derive(Clone, Debug)]
+    pub(crate) struct Health {
+        client: ShardedClient,
+        generation_health: Arc<AtomicBool>,
+    }
 }
 
 impl Health {
