@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Set docker label if present
+    // Set docker label always
     if let Ok(label) = std::env::var("DOCKER_LABEL") {
         // Set it from an env var
         println!("cargo:rustc-env=DOCKER_LABEL={label}");
