@@ -1,4 +1,11 @@
 use std::error::Error;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    // Emit cargo and rustc compile time values
+    EmitBuilder::builder().all_cargo().all_rustc().emit()?;
+
+    Ok(())
+}
 use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
