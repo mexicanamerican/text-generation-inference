@@ -12,7 +12,7 @@ use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use axum::{http, Json, Router};
+use axum::{http, Json, Router, response::IntoResponse};
 use axum_tracing_opentelemetry::opentelemetry_tracing_layer;
 use futures::stream::StreamExt;
 use futures::Stream;
