@@ -362,6 +362,26 @@ pub async fn get_model_info(
 
     if response.status().is_success() {
         let hub_model_info: HubModelInfo =
+            match serde_json::from_str(&response.text().await.ok()?) {
+                Ok(info) => info,
+                Err(err) => {
+                    tracing::error!("Failed to parse model info: {}", err);
+                    return None;
+                }
+            };
+        if let Some(sha) = &hub_model_info.sha {
+            tracing::info!(
+                "Serving revision {sha} of model {}",
+                hub_model_info.model_id
+            );
+        }
+        Some(hub_model_info)
+    } else {
+        None
+    }
+
+    if response.status().is_success() {
+        let hub_model_info: HubModelInfo =
             serde_json::from_str(&response.text().await.ok()?).ok()?;
         if let Some(sha) = &hub_model_info.sha {
             tracing::info!(
@@ -392,3 +412,5 @@ enum RouterError {
     #[error("Axum webserver failed: {0}")]
     Axum(#[from] axum::BoxError),
 }
+    #[error("Failed to parse model info: {0}")]
+    ParseModelInfo(#[from] serde_json::Error),
