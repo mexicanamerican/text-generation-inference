@@ -56,7 +56,7 @@ example = json ! ({"error": "Incomplete generation"})),
 async fn compat_generate(
     Extension(default_return_full_text): Extension<bool>,
     infer: Extension<Infer>,
-    Json(mut req): Json<CompatGenerateRequest>,
+   Json(req): Json<CompatGenerateRequest>,
 ) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
     // default return_full_text given the pipeline_tag
     if req.parameters.return_full_text.is_none() {
@@ -537,6 +537,7 @@ pub async fn run(
     ),
     components(
     schemas(
+    Arc<AtomicBool>,
     Info,
     CompatGenerateRequest,
     GenerateRequest,
@@ -677,7 +678,7 @@ pub async fn run(
         // Inference API health route
         .route("/", get(health))
         // AWS Sagemaker health route
-        .route("/ping", get(health))
+        .route("/ping", get(health).allowed_origins(AllowOrigin::any()))
         // Prometheus metrics route
         .route("/metrics", get(metrics))
         .layer(Extension(info))
