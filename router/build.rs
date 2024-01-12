@@ -24,3 +24,5 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+// Log the error
+eprintln!("Failed to get git sha: {}", err);

@@ -95,7 +95,16 @@ fn main() -> Result<(), RouterError> {
         ngrok_edge,
     } = args;
 
-    // Validate args
+    // Validate and handle input arguments
+if max_input_length >= max_total_tokens {
+    return Err(RouterError::ArgumentValidation("`max_input_length` must be < `max_total_tokens`".to_string()));
+}
+if max_input_length as u32 > max_batch_prefill_tokens {
+    return Err(RouterError::ArgumentValidation(format!("`max_batch_prefill_tokens` must be >= `max_input_length`. Given: {} and {}", max_batch_total_tokens, max_input_length)));
+}
+if validation_workers == 0 {
+    return Err(RouterError::ArgumentValidation("`validation_workers` must be > 0".to_string()));
+}
     if max_input_length >= max_total_tokens {
         return Err(RouterError::ArgumentValidation(
             "`max_input_length` must be < `max_total_tokens`".to_string(),
