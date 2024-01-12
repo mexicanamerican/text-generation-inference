@@ -22,5 +22,5 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("cargo:rustc-env=DOCKER_LABEL={label}");
     }
 
-    Ok(())
+    Ok(())?
 }
