@@ -21,6 +21,4 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Set it from an env var
         println!("cargo:rustc-env=DOCKER_LABEL={label}");
     }
-
-    Ok(())
 }
