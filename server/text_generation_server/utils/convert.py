@@ -3,6 +3,8 @@ import torch
 import os
 
 from loguru import logger
+import boto3
+import boto3
 from pathlib import Path
 from safetensors.torch import save_file, load_file, _find_shared_tensors, _is_complete
 from typing import List, Dict
