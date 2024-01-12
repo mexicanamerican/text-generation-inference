@@ -70,7 +70,7 @@ make install BUILD_EXTENSIONS=True
 On some machines, you may also need the OpenSSL libraries and gcc. On Linux machines, run:
 
 ```bash
-sudo apt-get install libssl-dev gcc -y
+sudo apt-get install openssl libssl-dev gcc -y
 ```
 
 </Tip>
