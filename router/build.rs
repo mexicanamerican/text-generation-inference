@@ -10,9 +10,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .is_err()
     {
         // Unable to get the git sha
-        if let Ok(sha) = std::env::var("GIT_SHA") {
+        if std::env::var("GIT_SHA").is_err() {
             // Set it from an env var
-            println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
+                if let Ok(sha) = std::env::var("VERGEN_GIT_SHA") {
+        println!("VERGEN_GIT_SHA: {}", sha);
+   }
         }
     }
 
