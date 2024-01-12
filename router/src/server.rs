@@ -1,6 +1,10 @@
 /// HTTP Server logic
 use crate::health::Health;
-use crate::infer::{InferError, InferResponse, InferStreamResponse};
+use crate::health;
+use crate::health::Health;
+use crate::health::Health;
+use crate::health::Health;
+use crate::health;use crate::infer::{InferError, InferResponse, InferStreamResponse};
 use crate::validation::ValidationError;
 use crate::{
     BestOfSequence, CompatGenerateRequest, Details, ErrorResponse, FinishReason,
@@ -673,6 +677,11 @@ pub async fn run(
         // AWS Sagemaker route
         .route("/invocations", post(compat_generate))
         // Base Health route
+        .route("/health", get(health))
+        .layer(Extension(health.clone()))
+        .layer(Extension(health_ext))
+        .route("/ping", get(health))
+        .layer(Extension(health.clone()))
         .route("/health", get(health))
         // Inference API health route
         .route("/", get(health))
