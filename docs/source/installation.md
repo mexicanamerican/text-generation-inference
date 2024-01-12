@@ -1,6 +1,6 @@
 # Installation
 
-This section explains how to install the CLI tool as well as installing TGI from source. **The strongly recommended approach is to use Docker, as it does not require much setup. Check [the Quick Tour](./quicktour) to learn how to run TGI with Docker.**
+This section explains how to install the CLI tool as well as installing TGI from source. **It is recommended to use Docker, as it does not require much setup. Check [the Quick Tour](./quicktour) to learn how to run TGI with Docker.**
 
 ## Install CLI
 
@@ -16,7 +16,7 @@ make install
 If you would like to serve models with custom kernels, run
 
 ```bash
-BUILD_EXTENSIONS=True make install
+make install BUILD_EXTENSIONS=True
 ```
 
 ## Local Installation from Source
@@ -37,11 +37,15 @@ conda activate text-generation-inference
 
 You may also need to install Protoc.
 
-On Linux:
+On Linux
 
 ```bash
 PROTOC_ZIP=protoc-21.12-linux-x86_64.zip
-curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$PROTOC_ZIP
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+conda create -n text-generation-inference python=3.9
+conda activate text-generation-inference
+<br>curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$PROTOC_ZIP
 sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc
 sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 rm -f $PROTOC_ZIP
@@ -51,13 +55,14 @@ On MacOS, using Homebrew:
 
 ```bash
 brew install protobuf
+brew link protobuf
 ```
 
 Then run to install Text Generation Inference:
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-BUILD_EXTENSIONS=True make install
+make install BUILD_EXTENSIONS=True
 ```
 
 <Tip warning={true}>
@@ -65,7 +70,7 @@ BUILD_EXTENSIONS=True make install
 On some machines, you may also need the OpenSSL libraries and gcc. On Linux machines, run:
 
 ```bash
-sudo apt-get install libssl-dev gcc -y
+sudo apt-get install openssl libssl-dev gcc -y
 ```
 
 </Tip>
@@ -73,7 +78,7 @@ sudo apt-get install libssl-dev gcc -y
 Once installation is done, simply run:
 
 ```bash
-make run-falcon-7b-instruct
+make run gpt2
 ```
 
 This will serve Falcon 7B Instruct model from the port 8080, which we can query.
