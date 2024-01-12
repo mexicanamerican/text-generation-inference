@@ -13,7 +13,7 @@ use tracing::{instrument, Span};
 #[derive(Debug, Clone)]
 pub struct Validation {
     /// Validation parameters
-    max_best_of: usize,
+    max_best_of: usize, max_input_length: usize, max_stop_sequences: usize, max_total_tokens: usize,
     max_stop_sequences: usize,
     max_input_length: usize,
     max_total_tokens: usize,
@@ -60,7 +60,7 @@ impl Validation {
     }
 
     #[instrument(skip_all)]
-    async fn validate_input(
+    async fn validate_input(&self, max_new_tokens: u32,
         &self,
         inputs: String,
         truncate: Option<usize>,
@@ -82,9 +82,10 @@ impl Validation {
 
             // Get total tokens
             let total_tokens = input_length + max_new_tokens as usize;
+        let max_total_tokens = self.max_total_tokens;
 
             // Validate MaxTotalTokens
-            if total_tokens > self.max_total_tokens {
+            if total_tokens > max_total_tokens {
                 return Err(ValidationError::MaxTotalTokens(
                     self.max_total_tokens,
                     input_length,
@@ -147,6 +148,8 @@ impl Validation {
 
         // sampling must be true when best_of > 1
         let best_of = best_of.unwrap_or(1);
+        let max_input_length = self.max_input_length;
+        let max_total_tokens = self.max_total_tokens;
         let sampling = do_sample
             || temperature.is_some()
             || top_k.is_some()
@@ -158,6 +161,7 @@ impl Validation {
         }
 
         let temperature = temperature.unwrap_or(1.0);
+        let max_input_length = self.max_input_length;
         if temperature <= 0.0 {
             return Err(ValidationError::Temperature);
         }
