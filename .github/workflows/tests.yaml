@@ -25,6 +25,13 @@ jobs:
       SCCACHE: 0.3.3
 
     steps:
+      - name: Load AWS credentials
+        run: |
+          export AWS_REGION=us-east-1
+          export EC2_AMI_ID=ami-03cfed9ea28f4b002
+          export EC2_INSTANCE_TYPE=g5.12xlarge
+          export EC2_SUBNET_ID=subnet-931b34f5,subnet-ecb993cd,subnet-943dc2d8,subnet-45371f1a,subnet-ee93e0df,subnet-fddc3dfc
+          export EC2_SECURITY_GROUP=sg-030175c435ac141d6
       - uses: actions/checkout@v2
       - name: Set up Python
         uses: actions/setup-python@v1
@@ -80,3 +87,5 @@ jobs:
       - name: sccache stats
         run: |
           /usr/local/bin/sccache --show-stats
+      - uses: aws-actions/configure-aws-credentials@v1
+        if: success()
