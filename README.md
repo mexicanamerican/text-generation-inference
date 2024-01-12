@@ -7,7 +7,7 @@
 <a href="https://github.com/huggingface/text-generation-inference">
   <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/huggingface/text-generation-inference?style=social">
 </a>
-<a href="https://huggingface.github.io/text-generation-inference">
+<a href="https://huggingface.co/docs/text-generation-inference">
   <img alt="Swagger API documentation" src="https://img.shields.io/badge/API-Swagger-informational">
 </a>
 
@@ -87,7 +87,7 @@ docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingf
 ```
 **Note:** To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html). We also recommend using NVIDIA drivers with CUDA version 11.8 or higher.
 
-To see all options to serve your models (in the [code](https://github.com/huggingface/text-generation-inference/blob/main/launcher/src/main.rs) or in the cli:
+To see all options to serve your models (in the [code](https://huggingface.co/docs/text-generation-inference) or in the cli:
 ```
 text-generation-launcher --help
 ```
@@ -95,10 +95,7 @@ text-generation-launcher --help
 You can then query the model using either the `/generate` or `/generate_stream` routes:
 
 ```shell
-curl 127.0.0.1:8080/generate \
-    -X POST \
-    -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
-    -H 'Content-Type: application/json'
+tgi generate --model_name <model_name> --text "What is Deep Learning?" --max_new_tokens 20
 ```
 
 ```shell
@@ -111,7 +108,7 @@ curl 127.0.0.1:8080/generate_stream \
 or from Python:
 
 ```shell
-pip install text-generation
+pip install text_generation
 ```
 
 ```python
