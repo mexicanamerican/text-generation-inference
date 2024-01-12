@@ -24,7 +24,7 @@ from text_generation_server.models.gpt_neox import GPTNeoxSharded
 torch.backends.cuda.matmul.allow_tf32 = True
 
 # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
-torch.backends.cudnn.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True # Update the flag to allow TF32
 
 # Disable gradients
 torch.set_grad_enabled(False)
