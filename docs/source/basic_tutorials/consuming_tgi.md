@@ -9,8 +9,8 @@ After the launch, you can query the model using either the `/generate` or `/gene
 ```bash
 curl 127.0.0.1:8080/generate \
     -X POST \
-    -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
-    -H 'Content-Type: application/json'
+    --data-raw '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
+    --header 'Content-Type: application/json'
 ```
 
 
@@ -29,7 +29,7 @@ Once you start the TGI server, instantiate `InferenceClient()` with the URL to t
 ```python
 from huggingface_hub import InferenceClient
 
-client = InferenceClient(model=URL_TO_ENDPOINT_SERVING_TGI)
+client = InferenceClient(model='URL_TO_ENDPOINT_SERVING_TGI')
 client.text_generation(prompt="Write a code for snake game", model=URL_TO_ENDPOINT_SERVING_TGI)
 ```
 
