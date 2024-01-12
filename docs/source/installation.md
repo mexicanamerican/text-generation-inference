@@ -10,7 +10,7 @@ To install the CLI, you need to first clone the TGI repository and then run `mak
 
 ```bash
 git clone https://github.com/huggingface/tgi.git && cd text-generation-inference
-make install
+BUILD_EXTENSIONS=True make install
 ```
 
 If you would like to serve models with custom kernels, run
