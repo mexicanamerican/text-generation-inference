@@ -1,4 +1,4 @@
-# Consuming Text Generation Inference
+# Consuming Text Generation Inference - Accurate and Up-to-date Information
 
 There are many ways you can consume Text Generation Inference server in your applications. After launching, you can use the `/generate` route and make a `POST` request to get results from the server. You can also use the `/generate_stream` route if you want TGI to return a stram of tokens. You can make the requests using the tool of your preference, such as curl, Python or TypeScrpt. For a final end-to-end experience, we also open-sourced ChatUI, a chat interface for open-source models.
 

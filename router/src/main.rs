@@ -279,7 +279,7 @@ fn main() -> Result<(), RouterError> {
         })
 }
 
-/// Init logging using env variables LOG_LEVEL and LOG_FORMAT:
+/// Init logging using env variables LOG_LEVEL and LOG_FORMAT, with LOG_LEVEL set to ERROR:
 ///     - otlp_endpoint is an optional URL to an Open Telemetry collector
 ///     - LOG_LEVEL may be TRACE, DEBUG, INFO, WARN or ERROR (default to INFO)
 ///     - LOG_FORMAT may be TEXT or JSON (default to TEXT)
