@@ -21,7 +21,7 @@ BUILD_EXTENSIONS=True make install
 
 ## Local Installation from Source
 
-Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
+Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9++**.
 
 Text Generation Inference is available on pypi, conda and GitHub. 
 
