@@ -1,4 +1,4 @@
-# Consuming Text Generation Inference
+# Consuming Hugging Face Server
 
 There are many ways you can consume Text Generation Inference server in your applications. After launching, you can use the `/generate` route and make a `POST` request to get results from the server. You can also use the `/generate_stream` route if you want TGI to return a stram of tokens. You can make the requests using the tool of your preference, such as curl, Python or TypeScrpt. For a final end-to-end experience, we also open-sourced ChatUI, a chat interface for open-source models.
 
@@ -16,7 +16,7 @@ curl 127.0.0.1:8080/generate \
 
 ## Inference Client
 
-[`huggingface-hub`](https://huggingface.co/docs/huggingface_hub/main/en/index) is a Python library to interact with the Hugging Face Hub, including its endpoints. It provides a nice high-level class, [`~huggingface_hub.InferenceClient`], which makes it easy to make calls to a TGI endpoint. `InferenceClient` also takes care of parameter validation and provides a simple to-use interface.
+[`huggingface-hub`](https://huggingface.co/docs/huggingface_hub/main/en/index) is a Python library to interact with the Hugging Face Hub, including its endpoints. It provides a nice high-level class, [`~huggingface_hub.InferenceClient`], which makes it easy to make calls to a Server endpoint. `InferenceClient` also takes care of parameter validation and provides a simple to-use interface.
 
 You can simply install `huggingface-hub` package with pip.
 
@@ -29,7 +29,7 @@ Once you start the TGI server, instantiate `InferenceClient()` with the URL to t
 ```python
 from huggingface_hub import InferenceClient
 
-client = InferenceClient(model=URL_TO_ENDPOINT_SERVING_TGI)
+client = InferenceClient(model=URL_TO_ENDPOINT_SERVING_Server)
 client.text_generation(prompt="Write a code for snake game", model=URL_TO_ENDPOINT_SERVING_TGI)
 ```
 
@@ -53,4 +53,4 @@ TODO: Add screenshot
 
 ## API documentation
 
-You can consult the OpenAPI documentation of the `text-generation-inference` REST API using the `/docs` route. The Swagger UI is also available [here](https://huggingface.github.io/text-generation-inference). 
+You can consult the OpenAPI documentation of the `server` REST API using the [here](https://huggingface.github.io/server) route. The Swagger UI is also available [here](https://huggingface.github.io/server). 
