@@ -1,18 +1,17 @@
 <div align="center">
 
-![image](https://github.com/huggingface/text-generation-inference/assets/3841370/38ba1531-ea0d-4851-b31a-a6d4ddc944b0)
+![image](https://github.com/huggingface/server/assets/3841370/38ba1531-ea0d-4851-b31a-a6d4ddc944b0)
 
-# Text Generation Inference
+# Hugging Face Server
 
-<a href="https://github.com/huggingface/text-generation-inference">
-  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/huggingface/text-generation-inference?style=social">
+<a href="https://github.com/huggingface/server">
+  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/huggingface/server?style=social">
 </a>
-<a href="https://huggingface.github.io/text-generation-inference">
+<a href="https://huggingface.github.io/server">
   <img alt="Swagger API documentation" src="https://img.shields.io/badge/API-Swagger-informational">
 </a>
 
-A Rust, Python and gRPC server for text generation inference. Used in production at [HuggingFace](https://huggingface.co)
-to power Hugging Chat, the Inference API and Inference Endpoint.
+A Rust and Python server for text generation inference used at Hugging Face to power Hugging Chat, the Inference API, and Inference Endpoint. Additionally, it supports multiple hardware accelerators such as Habana first-gen Gaudi and Gaudi2, with detailed setup information available [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) and [Optimum Habana documentation](https://huggingface.co/docs/optimum/habana/index).
 
 </div>
 
@@ -129,13 +128,13 @@ print(text)
 
 ### API documentation
 
-You can consult the OpenAPI documentation of the `text-generation-inference` REST API using the `/docs` route.
+You can consult the OpenAPI documentation of the `server` REST API using the `/docs` route.
 The Swagger UI is also available at: [https://huggingface.github.io/text-generation-inference](https://huggingface.github.io/text-generation-inference).
 
 ### Using a private or gated model
 
 You have the option to utilize the `HUGGING_FACE_HUB_TOKEN` environment variable for configuring the token employed by
-`text-generation-inference`. This allows you to gain access to protected resources.
+`server`. This allows you to gain access to protected resources.
 
 For example, if you want to serve the gated Llama V2 model variants:
 
@@ -150,13 +149,13 @@ model=meta-llama/Llama-2-7b-chat-hf
 volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
 token=<your cli READ token>
 
-docker run --gpus all --shm-size 1g -e HUGGING_FACE_HUB_TOKEN=$token -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
+docker run --gpus all --shm-size 1g -e HUGGING_FACE_HUB_TOKEN=$token -p 8080:80 -v $volume:/data ghcr.io/huggingface/server:1.0.0 --model-id $model
 ```
 
 ### A note on Shared Memory (shm)
 
 [`NCCL`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html) is a communication framework used by
-`PyTorch` to do distributed training/inference. `text-generation-inference` make
+`PyTorch` to do distributed training/inference. `server` make
 use of `NCCL` to enable Tensor Parallelism to dramatically speed up inference for large language models.
 
 In order to share data between the different devices of a `NCCL` group, `NCCL` might fall back to using the host memory if
@@ -164,7 +163,7 @@ peer-to-peer using NVLink or PCI is not possible.
 
 To allow the container to use 1G of Shared Memory and support SHM sharing, we add `--shm-size 1g` on the above command.
 
-If you are running `text-generation-inference` inside `Kubernetes`. You can also add Shared Memory to the container by
+If you are running `server` inside `Kubernetes`. You can also add Shared Memory to the container by
 creating a volume with:
 
 ```yaml
@@ -181,12 +180,12 @@ this will impact performance.
 
 ### Distributed Tracing
 
-`text-generation-inference` is instrumented with distributed tracing using OpenTelemetry. You can use this feature
+`server` is instrumented with distributed tracing using OpenTelemetry. You can use this feature
 by setting the address to an OTLP collector with the `--otlp-endpoint` argument.
 
 ### Local install
 
-You can also opt to install `text-generation-inference` locally.
+You can also opt to install `server` locally.
 
 First [install Rust](https://rustup.rs/) and create a Python virtual environment with at least
 Python 3.9, e.g. using `conda`:
@@ -194,8 +193,8 @@ Python 3.9, e.g. using `conda`:
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-conda create -n text-generation-inference python=3.9
-conda activate text-generation-inference
+conda create -n server python=3.9
+conda activate server
 ```
 
 You may also need to install Protoc.
@@ -279,4 +278,4 @@ make integration-tests
 ## Other supported hardware
 
 TGI is also supported on the following AI hardware accelerators:
-- *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)
+- *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/server) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)
