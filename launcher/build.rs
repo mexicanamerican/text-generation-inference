@@ -27,3 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+    // Handle error
+    println!("Failed to get git sha: {}", e);
+    // Handle error
+    println!("Failed to get git sha: {}", e);
