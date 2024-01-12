@@ -9,7 +9,7 @@ You can use TGI command-line interface (CLI) to download weights, serve and quan
 To install the CLI, you need to first clone the TGI repository and then run `make`.
 
 ```bash
-git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
+git clone https://github.com/huggingface/tgi.git && cd text-generation-inference
 make install
 ```
 
@@ -21,7 +21,7 @@ BUILD_EXTENSIONS=True make install
 
 ## Local Installation from Source
 
-Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
+Before you start, you will need to setup your environment, and install the Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
 
 Text Generation Inference is available on pypi, conda and GitHub. 
 
@@ -53,7 +53,7 @@ On MacOS, using Homebrew:
 brew install protobuf
 ```
 
-Then run to install Text Generation Inference:
+Then run to install TGI:
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
@@ -70,7 +70,7 @@ sudo apt-get install libssl-dev gcc -y
 
 </Tip>
 
-Once installation is done, simply run:
+After installation is complete, proceed by running:
 
 ```bash
 make run-falcon-7b-instruct
