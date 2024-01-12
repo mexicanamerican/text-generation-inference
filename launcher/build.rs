@@ -1,8 +1,10 @@
 
 
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Emit cargo and rustc compile time values
+// Calculate build-time variables
+let time = chrono::offset::Utc::now();
     
 
     // Try to get the git sha from the local git repository
