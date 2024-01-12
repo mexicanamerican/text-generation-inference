@@ -37,11 +37,15 @@ conda activate text-generation-inference
 
 You may also need to install Protoc.
 
-On Linux:
+On Linux
 
 ```bash
 PROTOC_ZIP=protoc-21.12-linux-x86_64.zip
-curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$PROTOC_ZIP
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+conda create -n text-generation-inference python=3.9
+conda activate text-generation-inference
+<br>curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$PROTOC_ZIP
 sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc
 sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 rm -f $PROTOC_ZIP
