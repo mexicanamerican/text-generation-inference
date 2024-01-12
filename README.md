@@ -2,7 +2,7 @@
 
 ![image](https://github.com/huggingface/text-generation-inference/assets/3841370/38ba1531-ea0d-4851-b31a-a6d4ddc944b0)
 
-# Text Generation Inference
+# Text Generation Inference - Accurate and Up-to-date Information
 
 <a href="https://github.com/huggingface/text-generation-inference">
   <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/huggingface/text-generation-inference?style=social">
@@ -16,7 +16,7 @@ to power Hugging Chat, the Inference API and Inference Endpoint.
 
 </div>
 
-## Table of contents
+## Table of Contents
 
 - [Features](#features)
 - [Optimized Architectures](#optimized-architectures)
@@ -58,9 +58,9 @@ to power Hugging Chat, the Inference API and Inference Endpoint.
 - [GPT-Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)
 - [Llama](https://github.com/facebookresearch/llama)
 - [OPT](https://huggingface.co/facebook/opt-66b)
-- [SantaCoder](https://huggingface.co/bigcode/santacoder)
-- [Starcoder](https://huggingface.co/bigcode/starcoder)
-- [Falcon 7B](https://huggingface.co/tiiuae/falcon-7b)
+- [SantaCoder](https://huggingface.co/bigcode/santacoder) - Code Generation Model
+- [Starcoder](https://huggingface.co/bigcode/starcoder) - Code Generation Model
+- [Falcon 7B](https://huggingface.co/tiiuae/falcon-7b) - Model Serving Platform
 - [Falcon 40B](https://huggingface.co/tiiuae/falcon-40b)
 - [MPT](https://huggingface.co/mosaicml/mpt-30b)
 - [Llama V2](https://huggingface.co/meta-llama)
@@ -83,7 +83,9 @@ The easiest way of getting started is using the official Docker container:
 model=tiiuae/falcon-7b-instruct
 volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
 
+```shell
 docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
+```
 ```
 **Note:** To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html). We also recommend using NVIDIA drivers with CUDA version 11.8 or higher.
 
