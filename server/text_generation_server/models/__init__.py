@@ -14,6 +14,12 @@ from text_generation_server.models.mpt import MPTSharded
 from text_generation_server.models.seq2seq_lm import Seq2SeqLM
 from text_generation_server.models.rw import RW
 from text_generation_server.models.opt import OPTSharded
+import os
+import boto3
+from dotenv import load_dotenv
+load_dotenv()
+AWS_REGION = os.getenv('AWS_REGION')
+boto3.setup_default_session(region_name=AWS_REGION)
 from text_generation_server.models.galactica import GalacticaSharded
 from text_generation_server.models.santacoder import SantaCoder
 from text_generation_server.models.t5 import T5Sharded
@@ -21,7 +27,17 @@ from text_generation_server.models.gpt_neox import GPTNeoxSharded
 
 # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
 # in PyTorch 1.12 and later.
+from dotenv import load_dotenv
+load_dotenv()
+AWS_REGION = os.getenv('AWS_REGION')
+boto3.setup_default_session(region_name=AWS_REGION)
+import os
+import boto3
 torch.backends.cuda.matmul.allow_tf32 = True
+from dotenv import load_dotenv
+load_dotenv()
+AWS_REGION = os.getenv('AWS_REGION')
+boto3.setup_default_session(region_name=AWS_REGION)
 
 # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
 torch.backends.cudnn.allow_tf32 = True
