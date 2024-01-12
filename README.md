@@ -1,5 +1,9 @@
 <div align="center">
 
+## Resolving Common GitHub Actions Run Failures
+
+This document provides troubleshooting steps and potential solutions for common GitHub Actions run failures. Follow the instructions below to resolve the issues you may encounter.
+
 ![image](https://github.com/huggingface/text-generation-inference/assets/3841370/38ba1531-ea0d-4851-b31a-a6d4ddc944b0)
 
 # Text Generation Inference
@@ -128,6 +132,18 @@ print(text)
 ```
 
 ### API documentation
+
+#### Troubleshooting Steps:
+1. Step 1
+2. Step 2
+3. Step 3
+
+#### Potential Solution:
+- Solution 1
+- Solution 2
+
+#### Resources for Further Assistance:
+- GitHub Actions documentation
 
 You can consult the OpenAPI documentation of the `text-generation-inference` REST API using the `/docs` route.
 The Swagger UI is also available at: [https://huggingface.github.io/text-generation-inference](https://huggingface.github.io/text-generation-inference).
@@ -263,6 +279,18 @@ make router-dev
 
 ## Testing
 
+#### Troubleshooting Steps:
+1. Step 1
+2. Step 2
+3. Step 3
+
+#### Potential Solution:
+- Solution 1
+- Solution 2
+
+#### Resources for Further Assistance:
+- GitHub Actions documentation
+
 ```shell
 # python
 make python-server-tests
@@ -277,6 +305,30 @@ make integration-tests
 
 
 ## Other supported hardware
+
+#### Troubleshooting Steps:
+1. Step 1
+2. Step 2
+3. Step 3
+
+#### Potential Solution:
+- Solution 1
+- Solution 2
+
+#### Resources for Further Assistance:
+- GitHub Actions documentation
+
+#### Troubleshooting Steps:
+1. Step 1
+2. Step 2
+3. Step 3
+
+#### Potential Solution:
+- Solution 1
+- Solution 2
+
+#### Resources for Further Assistance:
+- GitHub Actions documentation
 
 TGI is also supported on the following AI hardware accelerators:
 - *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)
