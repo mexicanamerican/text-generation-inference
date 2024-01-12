@@ -1,0 +1,26 @@
+name: GitHub Actions Workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: us-east-1
+          audience: sts.amazonaws.com
+        env:
+          AWS_REGION: us-east-1
+          EC2_AMI_ID: ami-03cfed9ea28f4b002
+          EC2_INSTANCE_TYPE: g5.12xlarge
+          EC2_SUBNET_ID: subnet-931b34f5,subnet-ecb993cd,subnet-943dc2d8,subnet-45371f1a,subnet-ee93e0df,subnet-fddc3dfc
+          EC2_SECURITY_GROUP: sg-030175c435ac141d6
