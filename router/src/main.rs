@@ -129,7 +129,7 @@ fn main() -> Result<(), RouterError> {
             cors_allow_origin
                 .iter()
                 .map(|origin| origin.parse::<HeaderValue>().unwrap()),
-        )
+        ).into()
     });
 
     // Parse Huggingface hub token
@@ -212,7 +212,7 @@ fn main() -> Result<(), RouterError> {
             let max_supported_batch_total_tokens = match sharded_client
                 .warmup(max_input_length as u32, max_batch_prefill_tokens)
                 .await
-                .map_err(RouterError::Warmup)?
+                .map_err(RouterError::Warmup)
             {
                 // Older models do not support automatic max-batch-total-tokens
                 None => {
@@ -274,9 +274,7 @@ fn main() -> Result<(), RouterError> {
                 ngrok,
                 ngrok_authtoken,
                 ngrok_edge,
-                ngrok_authtoken,
-                ngrok_authtoken,
-            )
+                )
                 .await?;
             Ok(())
         })
