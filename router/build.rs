@@ -1,5 +1,5 @@
 use std::error::Error;
-use vergen::generate_cargo_keys as vergen;
+use vergen::{Config, EmitBuilder, OutputStyle};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Try to get the git sha from the local git repository
