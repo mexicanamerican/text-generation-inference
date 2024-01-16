@@ -2,7 +2,7 @@
 
 The easiest way of getting started is using the official Docker container. Install Docker following [their installation instructions](https://docs.docker.com/get-docker/).
 
-Let's say you want to deploy [Falcon-7B Instruct](https://huggingface.co/tiiuae/falcon-7b-instruct) model with TGI. Here is an example on how to do that:
+Let's say you want to deploy [Falcon-7B Instruct](https://huggingface.co/tiiuae/falcon-7b-instruct) model with TGI (Text Generation Inference). Here is an example on how to do that:
 
 ```bash
 model=tiiuae/falcon-7b-instruct

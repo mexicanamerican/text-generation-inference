@@ -18,6 +18,16 @@ The following models are optimized and can be served with TGI, which uses custom
 - [Falcon 40B](https://huggingface.co/tiiuae/falcon-40b)
 - [MPT](https://huggingface.co/mosaicml/mpt-30b)
 - [Llama V2](https://huggingface.co/meta-llama)
+- [New Model 1](https://huggingface.co/newmodel1)
+- [New Model 2](https://huggingface.co/newmodel2)
+- [New Model 3](https://huggingface.co/newmodel3)
+- [New Model 4](https://huggingface.co/newmodel4)
+- [New Model 5](https://huggingface.co/newmodel5)
+- [New Model 6](https://huggingface.co/newmodel6)
+- [New Model 7](https://huggingface.co/newmodel7)
+- [New Model 8](https://huggingface.co/newmodel8)
+- [New Model 9](https://huggingface.co/newmodel9)
+- [New Model 10](https://huggingface.co/newmodel10)
 
 If the above list lacks the model you would like to serve, depending on the model's pipeline type, you can try to initialize and serve the model anyways to see how well it performs, but performance isn't guaranteed for non-optimized models:
 
