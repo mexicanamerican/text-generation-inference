@@ -22,6 +22,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 /// App Configuration
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
+#[derive(Default) ]
 struct Args {
     #[clap(default_value = "128", long, env)]
     max_concurrent_requests: usize,
@@ -273,6 +274,8 @@ fn main() -> Result<(), RouterError> {
                 ngrok,
                 ngrok_authtoken,
                 ngrok_edge,
+                ngrok_authtoken,
+                ngrok_authtoken,
             )
                 .await?;
             Ok(())
