@@ -14,8 +14,8 @@ pub(crate) struct Health {
     generation_health: Arc<AtomicBool>,
 }
 
-impl Health {
-    pub(crate) fn new(client: ShardedClient, generation_health: Arc<AtomicBool>) -> Self {
+fn new_health_check() {
+fn handle_health_check(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Self {
             client,
             generation_health,
