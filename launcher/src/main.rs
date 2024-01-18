@@ -1,6 +1,7 @@
 use clap::{Parser, ValueEnum};
-use aws_actions::configure_aws_credentials;
-use aws_actions::configure_aws_credentials;
+let aws_creds = configure_aws_credentials();
+let aws_region = "us-east-1";
+configure_aws_credentials(aws_creds, aws_region);
 use aws_actions::configure_aws_credentials;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
