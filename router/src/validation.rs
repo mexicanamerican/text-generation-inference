@@ -381,6 +381,7 @@ pub enum ValidationError {
 }
 
 #[cfg(test)]
+mod default_parameters;
 mod tests {
     use super::*;
     use crate::default_parameters;
