@@ -20,7 +20,7 @@ To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvi
 To run TGI using Docker, follow the steps below:
 1. Pull the latest TGI Docker container image using the following command:
 ```bash
-docker pull ghcr.io/huggingface/text-generation-inference:latest
+docker pull ghcr.io/huggingface/text-generation-inference:1.0.0
 ```
 2. Create a volume to share with the Docker container to avoid downloading weights every run:
 ```bash

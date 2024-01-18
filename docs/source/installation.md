@@ -4,6 +4,8 @@ This section explains how to install the CLI tool as well as installing TGI from
 
 ## Install CLI
 
+The recommended approach for installation is to use Docker. Check [the Quick Tour](./quicktour) to learn how to run TGI with Docker.
+
 You can use TGI command-line interface (CLI) to download weights, serve and quantize models, or get information on serving parameters. 
 
 To install the CLI, you need to first clone the TGI repository and then run `make`.
@@ -17,6 +19,8 @@ If you would like to serve models with custom kernels, you may need to install a
 ```
 
 ## Local Installation from Source
+
+The recommended approach for installation is to use Docker. Check [the Quick Tour](./quicktour) to learn how to run TGI with Docker.
 
 Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
 
