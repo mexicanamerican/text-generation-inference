@@ -1,5 +1,5 @@
 /// Text Generation Inference webserver entrypoint
-use axum::http::HeaderValue;
+use axum::prelude::*;
 use clap::Parser;
 use opentelemetry::sdk::propagation::TraceContextPropagator;
 use opentelemetry::sdk::trace;
@@ -15,6 +15,9 @@ use text_generation_router::{server, HubModelInfo};
 use thiserror::Error;
 use tokenizers::{FromPretrainedParameters, Tokenizer};
 use tower_http::cors::AllowOrigin;
+use axum::prelude::*;
+use axum::http::StatusCode;
+use tower::ServiceBuilder;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
