@@ -274,7 +274,8 @@ fn main() -> Result<(), RouterError> {
                 ngrok_authtoken,
                 ngrok_edge,
             )
-                .await?;
+                .await
+                .map_err(RouterError::Axum)?;
             Ok(())
         })
 }
@@ -304,6 +305,24 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
         let tracer = opentelemetry_otlp::new_pipeline()
             .tracing()
             .with_exporter(
+    .with_exporter(
+        opentelemetry_otlp::new_exporter()
+            .tonic()
+            .with_endpoint(otlp_endpoint),
+    )
+    .with_trace_config(
+        trace::config()
+            .with_resource(Resource::new(vec![KeyValue::new(
+                "service.name",
+                "text-generation-inference.router",
+            )]))
+            .with_sampler(Sampler::AlwaysOn),
+    )
+    .install_batch(opentelemetry::runtime::Tokio)
+    .map_err(|err| {
+        tracing::error!("Failed to initialize OpenTelemetry: {:?}", err);
+        RouterError::Tokio(err.into())
+    })?;
                 opentelemetry_otlp::new_exporter()
                     .tonic()
                     .with_endpoint(otlp_endpoint),
@@ -333,6 +352,20 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
         .with(layers)
         .init();
 }
+    if let Ok(tracer) = tracer {
+        layers.push(tracing_opentelemetry::layer().with_tracer(tracer).boxed());
+        axum_tracing_opentelemetry::init_propagator().unwrap();
+    };
+}
+
+// Filter events with LOG_LEVEL
+let env_filter =
+    EnvFilter::try_from_env("LOG_LEVEL").unwrap_or_else(|_| EnvFilter::new("info"));
+
+tracing_subscriber::registry()
+    .with(env_filter)
+    .with(layers)
+    .init();
 
 /// get model info from the Huggingface Hub
 pub async fn get_model_info(
