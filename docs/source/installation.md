@@ -9,14 +9,14 @@ You can use TGI command-line interface (CLI) to download weights, serve and quan
 To install the CLI, you need to first clone the TGI repository and then run `make`.
 
 ```bash
-git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-make install
+git clone https://github.com/huggingface/text-generation-inference.git
+cd text-generation-inference && make install
 ```
 
 If you would like to serve models with custom kernels, run
 
 ```bash
-BUILD_EXTENSIONS=True make install
+cd text-generation-inference && BUILD_EXTENSIONS=True make install
 ```
 
 ## Local Installation from Source
@@ -70,7 +70,12 @@ sudo apt-get install libssl-dev gcc -y
 
 </Tip>
 
-Once installation is done, simply run:
+Once installation is done, you may also need the following steps: 
+1. Install the OpenSSL libraries and gcc if not already installed:
+
+```bash
+sudo apt-get install libssl-dev gcc -y
+```
 
 ```bash
 make run-falcon-7b-instruct

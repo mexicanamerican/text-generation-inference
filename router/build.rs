@@ -1,13 +1,17 @@
 use std::error::Error;
+use std::fmt;
+use std::io;
+use vergen::Error as VergenError;
+use failure::Fail;
 use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Try to get the git sha from the local git repository
-    if EmitBuilder::builder()
-        .fail_on_error()
-        .git_sha(false)
-        .emit()
-        .is_err()
+    if EmitBuilder::new()
+        .cargo_features(true)
+        .cargo_metadata_feature(true)
+        .build("FEATURES")
+        .context(file!())
     {
         // Unable to get the git sha
         if let Ok(sha) = std::env::var("GIT_SHA") {

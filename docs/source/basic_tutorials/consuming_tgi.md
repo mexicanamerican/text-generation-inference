@@ -9,7 +9,7 @@ After the launch, you can query the model using either the `/generate` or `/gene
 ```bash
 curl 127.0.0.1:8080/generate \
     -X POST \
-    -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
+    -d '{"inputs":"What is Deep Learning?","options":{"max_new_tokens":20}}' \
     -H 'Content-Type: application/json'
 ```
 
@@ -54,3 +54,12 @@ TODO: Add screenshot
 ## API documentation
 
 You can consult the OpenAPI documentation of the `text-generation-inference` REST API using the `/docs` route. The Swagger UI is also available [here](https://huggingface.github.io/text-generation-inference). 
+
+ ### Example:
+
+To make a GET request to the `/docs` route using Python, you can use the `requests` library as follows:
+```python
+import requests
+response = requests.get('http://YOUR_HOST:YOUR_PORT/docs')
+print(response.json())
+``` 
