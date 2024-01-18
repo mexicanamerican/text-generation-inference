@@ -163,8 +163,8 @@ let Args {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
-        .block_on(async {
-            init_logging(otlp_endpoint, json_output);
+        .block_on(async move { 
+    init_logging(otlp_endpoint, json_output).map_err(RouterError::Tokio)?;
 
             if tokenizer.is_none() {
                 tracing::warn!(
