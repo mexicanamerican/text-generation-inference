@@ -1,4 +1,7 @@
 use clap::{Parser, ValueEnum};
+use aws_actions::configure_aws_credentials;
+use aws_actions::configure_aws_credentials;
+use aws_actions::configure_aws_credentials;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use serde::Deserialize;
@@ -17,7 +20,7 @@ use std::time::{Duration, Instant};
 use std::{fs, io};
 use tracing_subscriber::EnvFilter;
 
-mod env_runtime;
+use aws_actions::configure_aws_credentials;
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Quantization {
