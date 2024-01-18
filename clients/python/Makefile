@@ -3,4 +3,5 @@ unit-tests:
 
 install:
 	pip install pip --upgrade
+	pip install -r requirements.txt
 	pip install -e .
