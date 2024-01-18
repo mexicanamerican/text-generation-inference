@@ -259,7 +259,7 @@ let Args {
             };
 
             // Run server
-            server::run(
+            server::run_with_error_handling_and_logging(
                 model_info,
                 shard_info,
                 compat_return_full_text,
