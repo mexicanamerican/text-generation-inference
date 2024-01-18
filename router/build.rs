@@ -1,4 +1,8 @@
 use std::error::Error;
+use std::fmt;
+use std::io;
+use vergen::Error as VergenError;
+use failure::Fail;
 use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
