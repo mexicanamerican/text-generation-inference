@@ -171,7 +171,6 @@ impl State {
         // Create span for this batch to add context to inference calls
         let next_batch_span = info_span!(parent: None, "batch", batch_size = tracing::field::Empty);
         next_batch_span.follows_from(&Span::current());
-
         let mut batch_requests = Vec::with_capacity(self.entries.len());
         let mut batch_entries =
             IntMap::with_capacity_and_hasher(self.entries.len(), BuildNoHashHasher::default());
