@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     EmitBuilder::builder().all_cargo().all_rustc().emit()?;
 
     // Try to get the git sha from the local git repository
-    if EmitBuilder::builder()
+    if EmitBuilder::builder().map_err(|e| Box::new(e) as Box<dyn Error>)?
         .fail_on_error()
         .git_sha(false)
         .emit()
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Set docker label if present
-    if let Ok(label) = std::env::var("DOCKER_LABEL") {
+    if let Ok(label) = std::env::var("DOCKER_LABEL").map_err(|e| Box::new(e) as Box<dyn Error>)? {
         // Set it from an env var
         println!("cargo:rustc-env=DOCKER_LABEL={label}");
     }

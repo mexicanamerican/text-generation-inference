@@ -21,6 +21,11 @@ BUILD_EXTENSIONS=True make install
 
 ## Local Installation from Source
 
+### Install Required Dependencies
+Before you start, you will need to install the following dependencies for the build process:
+- Rust (https://rustup.rs/)
+- Protoc (https://github.com/protocolbuffers/protobuf/releases)
+
 Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
 
 Text Generation Inference is available on pypi, conda and GitHub. 
@@ -35,7 +40,7 @@ conda create -n text-generation-inference python=3.9
 conda activate text-generation-inference
 ```
 
-You may also need to install Protoc.
+You may also need to install Protoc before running the build process.
 
 On Linux:
 
