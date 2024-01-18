@@ -13,10 +13,7 @@ git clone https://github.com/huggingface/text-generation-inference.git && cd tex
 make install
 ```
 
-If you would like to serve models with custom kernels, run
-
-```bash
-BUILD_EXTENSIONS=True make install
+If you would like to serve models with custom kernels, you may need to install additional dependencies. To install the CLI, you need to first clone the TGI repository and then run `make`.
 ```
 
 ## Local Installation from Source
