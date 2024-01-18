@@ -3,7 +3,7 @@ use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Emit cargo and rustc compile time values
-    EmitBuilder::builder().all_cargo().all_rustc().emit()?;
+    EmitBuilder::builder().all_cargo().all_rustc().emit().unwrap_or_else(|e| panic!("Failed to emit cargo and rustc compile time values: {:?}", e));
 
     // Try to get the git sha from the local git repository
     if EmitBuilder::builder()
