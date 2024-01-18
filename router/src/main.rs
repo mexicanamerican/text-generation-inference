@@ -21,7 +21,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 /// App Configuration
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+    #[clap(author, version, about, long_about = None)]
 struct Args {
     #[clap(default_value = "128", long, env)]
     max_concurrent_requests: usize,
