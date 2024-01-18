@@ -3,7 +3,7 @@ use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Try to get the git sha from the local git repository
-    if EmitBuilder::builder()
+    if let Err(err) = EmitBuilder::from_env()
         .fail_on_error()
         .git_sha(false)
         .emit()
