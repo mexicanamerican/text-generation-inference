@@ -73,7 +73,26 @@ or
 
 `AutoModelForSeq2SeqLM.from_pretrained(<model>, device_map="auto")`
 
-## Get started
+## Troubleshooting GitHub Actions Run
+
+If the GitHub Actions run fails, perform the following steps to troubleshoot the issue:
+- Check the error logs to identify the specific error message
+- Verify the GitHub Actions configuration file
+- Ensure that dependencies are correctly set up and installed
+
+### Docker
+
+The easiest way of getting started is using the official Docker container:
+
+```shell
+model=tiiuae/falcon-7b-instruct
+volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
+
+docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
+```
+**Note:** To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html). We also recommend using NVIDIA drivers with CUDA version 11.8 or higher.
+
+To see all options to serve your models (in the [code](https://github.com/huggingface/text-generation-inference/blob/main/launcher/src/main.rs) or in the cli:
 
 ### Docker
 
@@ -280,3 +299,10 @@ make integration-tests
 
 TGI is also supported on the following AI hardware accelerators:
 - *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)
+
+## Interpreting and Debugging Error Logs
+
+When encountering errors in the GitHub Actions run, it is important to carefully review the error logs to identify the root cause. Here are the steps to interpret and debug the error logs:
+- Look for error messages related to specific steps in the GitHub Actions workflow
+- Check for syntax errors or logical issues in the workflow file
+- Review the dependencies and environment setup to ensure all requirements are met
