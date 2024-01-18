@@ -8,7 +8,7 @@ Let's say you want to deploy [Falcon-7B Instruct](https://huggingface.co/tiiuae/
 model=tiiuae/falcon-7b-instruct
 volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
 
-docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
+docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:latest --model-id $model
 ```
 
 <Tip warning={true}>
@@ -17,10 +17,22 @@ To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvi
 
 </Tip>
 
-Once TGI is running, you can use the `generate` endpoint by doing requests. To learn more about how to query the endpoints, check the [Consuming TGI](./basic_tutorials/consuming_tgi) section.
+To run TGI using Docker, follow the steps below:
+1. Pull the latest TGI Docker container image using the following command:
+```bash
+docker pull ghcr.io/huggingface/text-generation-inference:latest
+```
+2. Create a volume to share with the Docker container to avoid downloading weights every run:
+```bash
+volume=$PWD/data
+```
+3. Run the TGI Docker container using the following command:
+```bash
+docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:latest --model-id $model
+``` you can use the `generate` endpoint by doing requests. To learn more about how to query the endpoints, check the [Consuming TGI](./basic_tutorials/consuming_tgi) section.
 
 ```bash
-curl 127.0.0.1:8080/generate -X POST -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' -H 'Content-Type: application/json'
+curl -X POST 127.0.0.1:8080/generate -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' -H 'Content-Type: application/json'
 ```
 
 <Tip>
