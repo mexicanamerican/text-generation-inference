@@ -316,7 +316,7 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
                     )]))
                     .with_sampler(Sampler::AlwaysOn),
             )
-            .install_batch(opentelemetry::runtime::Tokio);
+            .install_batch(opentelemetry::runtime::Tokio).map_err(RouterError::Tokio)?;
 
         if let Ok(tracer) = tracer {
             layers.push(tracing_opentelemetry::layer().with_tracer(tracer).boxed());
