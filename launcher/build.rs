@@ -14,14 +14,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         // Unable to get the git sha
         if let Ok(sha) = std::env::var("GIT_SHA") {
-            // Set it from an env var
+            // Set the Docker label from an environment variable
             println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
         }
     }
 
-    // Set docker label if present
+    // Check if the Docker label environment variable is present
     if let Ok(label) = std::env::var("DOCKER_LABEL") {
-        // Set it from an env var
+        // Print the cargo:rustc-env command to set the DOCKER_LABEL environment variable
         println!("cargo:rustc-env=DOCKER_LABEL={label}");
     }
 
