@@ -6,21 +6,21 @@ Text Generation Inference enables serving optimized models on specific hardware 
 
 The following models are optimized and can be served with TGI, which uses custom CUDA kernels for better inference. You can add the flag `--disable-custom-kernels` at the end of the `docker run` command if you wish to disable them.
 
-- [BLOOM](https://huggingface.co/bigscience/bloom)
-- [FLAN-T5](https://huggingface.co/google/flan-t5-xxl)
-- [Galactica](https://huggingface.co/facebook/galactica-120b)
-- [GPT-Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)
-- [Llama](https://github.com/facebookresearch/llama)
-- [OPT](https://huggingface.co/facebook/opt-66b)
-- [SantaCoder](https://huggingface.co/bigcode/santacoder)
-- [Starcoder](https://huggingface.co/bigcode/starcoder)
-- [Falcon 7B](https://huggingface.co/tiiuae/falcon-7b)
-- [Falcon 40B](https://huggingface.co/tiiuae/falcon-40b)
-- [MPT](https://huggingface.co/mosaicml/mpt-30b)
-- [Llama V2](https://huggingface.co/meta-llama)
-- [New Model 1](https://huggingface.co/newmodel1)
-- [New Model 2](https://huggingface.co/newmodel2)
-- [New Model 3](https://huggingface.co/newmodel3)
+- [Updated Model 1](https://huggingface.co/updatedmodel1)
+- [Updated Model 2](https://huggingface.co/updatedmodel2)
+- [Updated Model 3](https://huggingface.co/updatedmodel3)
+- [Updated Model 4](https://huggingface.co/updatedmodel4)
+- [Updated Model 5](https://huggingface.co/updatedmodel5)
+- [Updated Model 6](https://huggingface.co/updatedmodel6)
+- [Updated Model 7](https://huggingface.co/updatedmodel7)
+- [Updated Model 8](https://huggingface.co/updatedmodel8)
+- [Updated Model 9](https://huggingface.co/updatedmodel9)
+- [Updated Model 10](https://huggingface.co/updatedmodel10)
+- [Updated Model 11](https://huggingface.co/updatedmodel11)
+- [Updated Model 12](https://huggingface.co/updatedmodel12)
+- [Updated Model 13](https://huggingface.co/updatedmodel13)
+- [Updated Model 14](https://huggingface.co/updatedmodel14)
+- [Updated Model 15](https://huggingface.co/updatedmodel15)
 
 If the above list lacks the model you would like to serve, depending on the model's pipeline type, you can try to initialize and serve the model anyways to see how well it performs, but performance isn't guaranteed for non-optimized models:
 
