@@ -71,7 +71,14 @@ fn main() -> Result<(), RouterError> {
     // Get args
     let args = Args::parse();
     // Pattern match configuration
-    let Args {
+    let args = match Args::parse() {
+    Ok(args) => args,
+    Err(e) => {
+        tracing::error!("Failed to parse command line arguments: {:?}", e);
+        return Err(RouterError::ArgumentValidation(format!("Failed to parse command line arguments: {:?}", e)));
+    }
+};
+let Args {
         max_concurrent_requests,
         max_best_of,
         max_stop_sequences,
@@ -207,7 +214,7 @@ fn main() -> Result<(), RouterError> {
             let shard_info = sharded_client.info().await.map_err(RouterError::Info)?;
 
             // Warmup model
-            tracing::info!("Warming up model");
+            tracing::info!("Warming up model...");
             let max_supported_batch_total_tokens = match sharded_client
                 .warmup(max_input_length as u32, max_batch_prefill_tokens)
                 .await
@@ -283,7 +290,7 @@ fn main() -> Result<(), RouterError> {
 ///     - otlp_endpoint is an optional URL to an Open Telemetry collector
 ///     - LOG_LEVEL may be TRACE, DEBUG, INFO, WARN or ERROR (default to INFO)
 ///     - LOG_FORMAT may be TEXT or JSON (default to TEXT)
-fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
+fn init_logging(otlp_endpoint: &Option<String>, json_output: bool) -> Result<(), RouterError> {
     let mut layers = Vec::new();
 
     // STDOUT/STDERR layer
