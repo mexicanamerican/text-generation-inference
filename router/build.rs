@@ -1,4 +1,16 @@
-use std::error::Error;
+use axum::handler::get;
+use axum::response::Html;
+use axum::Router;
+
+pub fn health_routes() -> Router {
+    Router::new().route("/", get(|| async { Html("<h1>Healthy</h1>".to_string()) }))
+}use axum::handler::get;
+use axum::response::Html;
+use axum::Router;
+
+pub fn health_routes() -> Router {
+    Router::new().route("/", get(|| async { Html("<h1>Healthy</h1>".to_string()) }))
+}use std::error::Error;
 use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
