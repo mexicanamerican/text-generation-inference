@@ -1,4 +1,4 @@
-use std::fmt;
+use aws_actions::configure_aws_credentials;
 use std::process::Command;
 
 pub(crate) struct Env {
@@ -11,7 +11,9 @@ pub(crate) struct Env {
 
 impl Env {
     pub fn new() -> Self {
-        let nvidia_env = nvidia_smi();
+        let aws_creds = configure_aws_credentials();
+        let aws_region = "eu-central-1";
+        configure_aws_credentials(aws_creds, aws_region);
 
         Self {
             nvidia_env: nvidia_env.unwrap_or("N/A".to_string()),
