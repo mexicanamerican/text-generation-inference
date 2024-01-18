@@ -9,8 +9,9 @@ You can use TGI command-line interface (CLI) to download weights, serve and quan
 To install the CLI, you need to first clone the TGI repository and then run `make`.
 
 ```bash
-git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
+git clone https://github.com/mexicanamerican/text-generation-inference.git && cd text-generation-inference
 make install
+pip install -r requirements.txt
 ```
 
 If you would like to serve models with custom kernels, run
@@ -21,9 +22,9 @@ BUILD_EXTENSIONS=True make install
 
 ## Local Installation from Source
 
-Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
+Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+ and pip**.
 
-Text Generation Inference is available on pypi, conda and GitHub. 
+Text Generation Inference is available on PyPI, Conda, and GitHub. You can also install it using pip. 
 
 To install and launch locally, first [install Rust](https://rustup.rs/) and create a Python virtual environment with at least
 Python 3.9, e.g. using conda:
@@ -70,7 +71,17 @@ sudo apt-get install libssl-dev gcc -y
 
 </Tip>
 
-Once installation is done, simply run:
+## Troubleshooting
+
+If you encounter any issues during the installation process, consider the following troubleshooting tips:
+  - Make sure you have the necessary permissions to install software on your system.
+  - Check for any internet connectivity issues that may be affecting the installation process.
+  - Verify that you have the correct version of Python and pip installed.
+  - If you encounter protobuf installation issues, ensure that you have the necessary dependencies installed.
+
+If the installation issues persist, please refer to the TGI documentation for further assistance.
+
+Once the installation is complete, you can run:
 
 ```bash
 make run-falcon-7b-instruct
