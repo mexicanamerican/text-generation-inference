@@ -20,7 +20,20 @@ use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, TryAcquireError};
 use tokio::time::Instant;
 use tracing::{info_span, instrument, Instrument, Span};
 
-/// Inference struct
+use crate::validation::{Validation, ValidationError};
+use crate::{Entry, Queue, Token};
+use crate::{GenerateRequest, PrefillToken};
+use flume::r#async::RecvStream;
+use flume::SendTimeoutError;
+use futures::future::try_join_all;
+use futures::stream::StreamExt;
+use nohash_hasher::IntMap;
+use std::sync::{atomic::{AtomicBool, Ordering},Arc};
+use std::time::Duration;
+use text_generation_client::{Batch, CachedBatch, ClientError, GeneratedText, Generation, PrefillTokens, ShardedClient};
+use thiserror::Error;
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, TryAcquireError};
+use tokio::time::Instant;
 #[derive(Clone)]
 pub struct Infer {
     /// Validation
