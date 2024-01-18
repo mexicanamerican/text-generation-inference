@@ -333,7 +333,7 @@ async fn generate_stream(
     Json(req): Json<GenerateRequest>,
 ) -> (
     HeaderMap,
-    Sse<impl Stream<Item = Result<Event, Infallible>>>,
+    SseFuture<impl Stream<Item = Result<Event, Infallible>>>,
 ) {
     let span = tracing::Span::current();
     let start_time = Instant::now();
@@ -486,7 +486,7 @@ async fn generate_stream(
         }
     };
 
-    (headers, Sse::new(stream).keep_alive(KeepAlive::default()))
+    (headers, SseFuture::new(stream).keep_alive(KeepAlive::default()))
 }
 
 /// Prometheus metrics scrape endpoint

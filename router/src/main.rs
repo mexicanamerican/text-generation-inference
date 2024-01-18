@@ -176,7 +176,7 @@ fn main() -> Result<(), RouterError> {
                 false => get_model_info(&tokenizer_name, revision, authorization_token)
                     .await
                     .unwrap_or_else(|| {
-                        tracing::warn!("Could not retrieve model info from the Hugging Face hub.");
+                        log::warn!("Could not retrieve model info from the Hugging Face hub.");
                         HubModelInfo {
                             model_id: tokenizer_name.to_string(),
                             sha: None,
@@ -211,7 +211,7 @@ fn main() -> Result<(), RouterError> {
             let max_supported_batch_total_tokens = match sharded_client
                 .warmup(max_input_length as u32, max_batch_prefill_tokens)
                 .await
-                .map_err(RouterError::Warmup)?
+                ?
             {
                 // Older models do not support automatic max-batch-total-tokens
                 None => {
@@ -240,7 +240,7 @@ fn main() -> Result<(), RouterError> {
                     max_supported_batch_total_tokens
                 }
             };
-            tracing::info!("Setting max batch total tokens to {max_supported_batch_total_tokens}");
+            log::info!("Setting max batch total tokens to {max_supported_batch_total_tokens}");
             tracing::info!("Connected");
 
             let addr = match hostname.parse() {
@@ -316,7 +316,7 @@ fn init_logging(otlp_endpoint: Option<String>, json_output: bool) {
                     )]))
                     .with_sampler(Sampler::AlwaysOn),
             )
-            .install_batch(opentelemetry::runtime::Tokio);
+            .install_batch(opentelemetry::runtime::Tokio).map_err(RouterError::Tokio)?;
 
         if let Ok(tracer) = tracer {
             layers.push(tracing_opentelemetry::layer().with_tracer(tracer).boxed());
