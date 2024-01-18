@@ -1,7 +1,6 @@
 use clap::{Parser, ValueEnum};
 use aws_actions::configure_aws_credentials;
 use aws_actions::configure_aws_credentials;
-use aws_actions::configure_aws_credentials;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use serde::Deserialize;
