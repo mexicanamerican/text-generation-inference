@@ -50,6 +50,54 @@ impl Infer {
         max_waiting_tokens: usize,
         max_concurrent_requests: usize,
         requires_padding: bool,
+    ) -> Self {
+        // Infer shared state
+        let queue = Queue::new(requires_padding, 16);
+        let shared = Arc::new(Shared {
+            batching_task: Notify::new(),
+        });
+
+        // Spawn batching background task that contains all the inference logic
+        tokio::spawn(batching_task(
+            client,
+            waiting_served_ratio,
+            max_batch_prefill_tokens,
+            max_batch_total_tokens,
+            max_waiting_tokens,
+            queue.clone(),
+            shared.clone(),
+        ));
+
+        // Inference limit with a semaphore
+        let semaphore = Arc::new(Semaphore::new(max_concurrent_requests));
+
+        Self {
+            validation,
+            queue,
+            shared,
+            limit_concurrent_requests: semaphore,
+        }
+    }
+    limit_concurrent_requests: Arc<Semaphore>,
+}
+
+/// Infer shared state
+struct Shared {
+    /// Batching background Tokio task notifier
+    batching_task: Notify,
+}
+
+impl Infer {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        client: ShardedClient,
+        validation: Validation,
+        waiting_served_ratio: f32,
+        max_batch_prefill_tokens: u32,
+        max_batch_total_tokens: u32,
+        max_waiting_tokens: usize,
+        max_concurrent_requests: usize,
+        requires_padding: bool,
         generation_health: Arc<AtomicBool>,
     ) -> Self {
         // Infer shared state
