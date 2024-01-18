@@ -303,6 +303,6 @@ TGI is also supported on the following AI hardware accelerators:
 ## Interpreting and Debugging Error Logs
 
 When encountering errors in the GitHub Actions run, it is important to carefully review the error logs to identify the root cause. Here are the detailed steps to interpret and debug the error logs in case of failed GitHub Actions run:
-- Examine the error logs for messages related to specific steps in the GitHub Actions workflow and identify the source of the error
+- Examine the error logs for messages related to specific steps in the GitHub Actions workflow and identify the source of the error. Look for any error messages, warnings, or exceptions that may indicate the cause of the failure.
 - Verify the GitHub Actions configuration file for any syntax errors, logical issues, or missing/incorrect setup instructions
 - Ensure that all the required dependencies are correctly set up and installed, and the environment is properly configured for the GitHub Actions workflow

@@ -6,10 +6,16 @@ This section explains how to install the CLI tool as well as installing TGI from
 
 You can use TGI command-line interface (CLI) to download weights, serve and quantize models, or get information on serving parameters. 
 
-To install the CLI, you need to first clone the TGI repository and then run the following command:
+To install the CLI, you need to first clone the TGI repository and then run the following command. After that, follow the steps below to interpret and debug the error logs in case of a failed GitHub Actions run:
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
+
+```bash
+# Add any necessary steps or dependencies for the GitHub Actions workflow here.
+# Examine the error logs for messages related to specific steps in the GitHub Actions workflow and identify the source of the error. Look for any error messages, warnings, or exceptions that may indicate the cause of the failure.
+# Verify the GitHub Actions configuration file for any syntax errors, logical issues, or missing/incorrect setup instructions
+```
 make install
 
 # Add any necessary steps or dependencies for the GitHub Actions workflow here.
@@ -17,6 +23,12 @@ make install
 ```
 
 If you would like to serve models with custom kernels, run
+
+```bash
+# Add any necessary steps or dependencies for the GitHub Actions workflow here.
+# Examine the error logs for messages related to specific steps in the GitHub Actions workflow and identify the source of the error. Look for any error messages, warnings, or exceptions that may indicate the cause of the failure.
+# Verify the GitHub Actions configuration file for any syntax errors, logical issues, or missing/incorrect setup instructions
+```
 
 ```bash
 BUILD_EXTENSIONS=True make install
@@ -75,6 +87,10 @@ BUILD_EXTENSIONS=True make install
 <Tip warning={true}>
 
 On some machines, you may also need the OpenSSL libraries and gcc. On Linux machines, run:
+```bash
+# Examine the error logs for messages related to specific steps in the GitHub Actions workflow and identify the source of the error. Look for any error messages, warnings, or exceptions that may indicate the cause of the failure.
+# Verify the GitHub Actions configuration file for any syntax errors, logical issues, or missing/incorrect setup instructions
+```
 
 ```bash
 sudo apt-get install libssl-dev gcc -y
