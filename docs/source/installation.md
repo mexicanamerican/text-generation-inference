@@ -9,8 +9,7 @@ You can use TGI command-line interface (CLI) to download weights, serve and quan
 To install the CLI, you need to first clone the TGI repository and then run `make`.
 
 ```bash
-git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-make install
+pip install text-generation-inference
 ```
 
 If you would like to serve models with custom kernels, run
@@ -21,7 +20,7 @@ BUILD_EXTENSIONS=True make install
 
 ## Local Installation from Source
 
-Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
+Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+ and Rust**.
 
 Text Generation Inference is available on pypi, conda and GitHub. 
 
@@ -31,8 +30,9 @@ Python 3.9, e.g. using conda:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-conda create -n text-generation-inference python=3.9
-conda activate text-generation-inference
+pip install virtualenv
+python3 -m venv env
+source env/bin/activate
 ```
 
 You may also need to install Protoc.
