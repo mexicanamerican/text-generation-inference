@@ -6,17 +6,23 @@ This section explains how to install the CLI tool as well as installing TGI from
 
 You can use TGI command-line interface (CLI) to download weights, serve and quantize models, or get information on serving parameters. 
 
-To install the CLI, you need to first clone the TGI repository and then run `make`.
+To install the CLI, you need to first clone the TGI repository and then run the following command:
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
 make install
+
+# Additional step for GitHub Actions workflow:
+# Add any necessary steps or dependencies for the GitHub Actions workflow here.
 ```
 
 If you would like to serve models with custom kernels, run
 
 ```bash
 BUILD_EXTENSIONS=True make install
+
+# Additional step for GitHub Actions workflow:
+# Add any necessary steps or dependencies for the GitHub Actions workflow here.
 ```
 
 ## Local Installation from Source
@@ -57,7 +63,11 @@ Then run to install Text Generation Inference:
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
+git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
 BUILD_EXTENSIONS=True make install
+
+# Additional step for GitHub Actions workflow:
+# Add any necessary steps or dependencies for the GitHub Actions workflow here.
 ```
 
 <Tip warning={true}>
