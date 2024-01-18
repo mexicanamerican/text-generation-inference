@@ -3,6 +3,12 @@ name: Build and push docker image to internal registry
 on:
   workflow_dispatch:
   push:
+    paths:
+      - ".github/workflows/build.yaml"
+      - "server/**"
+      - "integration-tests/**"
+      - "server/**"
+      - "proto/**"
     branches:
       - 'main'
     tags:
@@ -106,7 +112,7 @@ jobs:
         uses: docker/login-action@v2.1.0
         with:
           username: ${{ secrets.AZURE_DOCKER_USERNAME }}
-          password: ${{ secrets.AZURE_DOCKER_PASSWORD }}
+          password: ${{ secrets.$\{{ secrets.AZURE_DOCKER_PASSWORD }} }}
           registry: db4c2190dd824d1f950f5d1555fbadf0.azurecr.io
       # If pull request
       - name: Extract metadata (tags, labels) for Docker
