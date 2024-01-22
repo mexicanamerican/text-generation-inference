@@ -78,7 +78,6 @@ or
 ### Docker
 
 The easiest way of getting started is using the official Docker container:
-
 ```shell
 model=tiiuae/falcon-7b-instruct
 volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
