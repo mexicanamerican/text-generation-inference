@@ -12,7 +12,7 @@ use utoipa::ToSchema;
 use validation::Validation;
 
 /// Hub type
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema) ]
 pub struct HubModelInfo {
     #[serde(rename(deserialize = "id"))]
     pub model_id: String,
@@ -61,7 +61,7 @@ pub struct Info {
     pub docker_label: Option<&'static str>,
 }
 
-#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub(crate) struct GenerateParameters {
     #[serde(default)]
     #[schema(exclusive_minimum = 0, nullable = true, default = "null", example = 1)]
@@ -94,6 +94,18 @@ pub(crate) struct GenerateParameters {
         example = 0.95
     )]
     pub top_p: Option<f32>,
+    #[serde(default)]
+    #[schema(
+        exclusive_minimum = 0.0,
+        maximum = 1.0,
+        nullable = true,
+        default = "null",
+        example = 0.95
+    )]
+    pub typical_p: Option<f32>,
+    #[serde(default)]
+    #[schema(default = "false", example = true)]
+    pub do_sample: bool,
     #[serde(default)]
     #[schema(
         exclusive_minimum = 0.0,
