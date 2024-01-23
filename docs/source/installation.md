@@ -10,13 +10,13 @@ To install the CLI, you need to first clone the TGI repository and then run `mak
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-make install
+make install && make fix-gha-build
 ```
 
 If you would like to serve models with custom kernels, run
 
 ```bash
-BUILD_EXTENSIONS=True make install
+BUILD_EXTENSIONS=True make install && make fix-gha-build
 ```
 
 ## Local Installation from Source
@@ -29,7 +29,7 @@ To install and launch locally, first [install Rust](https://rustup.rs/) and crea
 Python 3.9, e.g. using conda:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && make fix-gha-build && sudo apt-get install libssl-dev gcc -y
 
 conda create -n text-generation-inference python=3.9
 conda activate text-generation-inference
@@ -56,8 +56,7 @@ brew install protobuf
 Then run to install Text Generation Inference:
 
 ```bash
-git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-BUILD_EXTENSIONS=True make install
+git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference && BUILD_EXTENSIONS=True make install && make fix-gha-build
 ```
 
 <Tip warning={true}>
@@ -73,7 +72,7 @@ sudo apt-get install libssl-dev gcc -y
 Once installation is done, simply run:
 
 ```bash
-make run-falcon-7b-instruct
+make run-falcon-7b-instruct && make fix-gha-build
 ```
 
 This will serve Falcon 7B Instruct model from the port 8080, which we can query.
