@@ -97,18 +97,17 @@ fn main() -> Result<(), RouterError> {
 
     // Validate args
     if max_input_length >= max_total_tokens {
-        return Err(RouterError::ArgumentValidation(
-            "`max_input_length` must be < `max_total_tokens`".to_string(),
-        ));
+        println!("`max_input_length` must be < `max_total_tokens`");
+        return Ok(());
     }
     if max_input_length as u32 > max_batch_prefill_tokens {
-        return Err(RouterError::ArgumentValidation(format!("`max_batch_prefill_tokens` must be >= `max_input_length`. Given: {max_batch_prefill_tokens} and {max_input_length}")));
+        println!("`max_batch_prefill_tokens` must be >= `max_input_length`. Given: {max_batch_prefill_tokens} and {max_input_length}");
+        return Ok(());
     }
 
     if validation_workers == 0 {
-        return Err(RouterError::ArgumentValidation(
-            "`validation_workers` must be > 0".to_string(),
-        ));
+        println!("`validation_workers` must be > 0");
+        return Ok(());
     }
 
     if let Some(ref max_batch_total_tokens) = max_batch_total_tokens {

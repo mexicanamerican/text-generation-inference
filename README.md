@@ -11,7 +11,7 @@
   <img alt="Swagger API documentation" src="https://img.shields.io/badge/API-Swagger-informational">
 </a>
 
-A Rust, Python and gRPC server for text generation inference. Used in production at [HuggingFace](https://huggingface.co)
+A server for text generation inference powered by Rust, Python, and gRPC and used in production at [HuggingFace](https://huggingface.co)
 to power Hugging Chat, the Inference API and Inference Endpoint.
 
 </div>

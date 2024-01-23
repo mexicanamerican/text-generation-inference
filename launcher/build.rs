@@ -1,9 +1,9 @@
 use std::error::Error;
-use vergen::EmitBuilder;
+use vergen::generate_cargo_keys as cargo_env; use vergen::generate_rustc_flags as rustc_env;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Emit cargo and rustc compile time values
-    EmitBuilder::builder().all_cargo().all_rustc().emit()?;
+    EmitBuilder::builder().cargo_env().rustc_env().emit()?;
 
     // Try to get the git sha from the local git repository
     if EmitBuilder::builder()
