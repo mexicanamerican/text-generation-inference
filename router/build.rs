@@ -3,7 +3,7 @@ use vergen::EmitBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Try to get the git sha from the local git repository
-    if EmitBuilder::builder()
+    if let Err(e) = EmitBuilder::builder().emit()
         .fail_on_error()
         .git_sha(false)
         .emit()
@@ -12,14 +12,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Unable to get the git sha
         if let Ok(sha) = std::env::var("GIT_SHA") {
             // Set it from an env var
-            println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
+            log::error!("Failed to get git sha: {:?}", e);
         }
     }
 
     // Set docker label if present
     if let Ok(label) = std::env::var("DOCKER_LABEL") {
         // Set it from an env var
-        println!("cargo:rustc-env=DOCKER_LABEL={label}");
+        log::error!("Failed to set docker label: {:?}", e);
     }
 
     Ok(())
