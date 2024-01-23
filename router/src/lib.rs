@@ -1,4 +1,5 @@
-mod health;
+mod health;use health::health_check;
+use warp::Filter;
 /// Text Generation Inference Webserver
 mod infer;
 mod queue;

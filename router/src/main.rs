@@ -160,7 +160,7 @@ fn main() -> Result<(), RouterError> {
             init_logging(otlp_endpoint, json_output);
 
             if tokenizer.is_none() {
-                tracing::warn!(
+                log::error!(
                     "Could not find a fast tokenizer implementation for {tokenizer_name}"
                 );
                 tracing::warn!("Rust input length validation and truncation is disabled");
@@ -176,7 +176,7 @@ fn main() -> Result<(), RouterError> {
                 false => get_model_info(&tokenizer_name, revision, authorization_token)
                     .await
                     .unwrap_or_else(|| {
-                        tracing::warn!("Could not retrieve model info from the Hugging Face hub.");
+                        log::error!("Could not retrieve model info from the Hugging Face hub.");
                         HubModelInfo {
                             model_id: tokenizer_name.to_string(),
                             sha: None,
@@ -188,7 +188,7 @@ fn main() -> Result<(), RouterError> {
             // if pipeline-tag == text-generation we default to return_full_text = true
             let compat_return_full_text = match &model_info.pipeline_tag {
                 None => {
-                    tracing::warn!("no pipeline tag found for model {tokenizer_name}");
+                    log::error!("no pipeline tag found for model {tokenizer_name}");
                     false
                 }
                 Some(pipeline_tag) => pipeline_tag.as_str() == "text-generation",
@@ -218,14 +218,14 @@ fn main() -> Result<(), RouterError> {
                     let max_batch_total_tokens = max_batch_total_tokens.unwrap_or(
                         16000.max((max_total_tokens as u32).max(max_batch_prefill_tokens)),
                     );
-                    tracing::warn!("Model does not support automatic max batch total tokens");
+                    log::error!("Model does not support automatic max batch total tokens");
                     max_batch_total_tokens
                 }
                 // Flash attention models return their max supported total tokens
                 Some(max_supported_batch_total_tokens) => {
                     // Warn if user added his own max-batch-total-tokens as we will ignore it
                     if max_batch_total_tokens.is_some() {
-                        tracing::warn!(
+                        log::error!(
                             "`--max-batch-total-tokens` is deprecated for Flash \
                         Attention models."
                         );
