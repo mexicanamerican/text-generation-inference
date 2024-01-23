@@ -62,6 +62,68 @@ impl Health {
             // Update generation health
             self.generation_health.store(value, Ordering::SeqCst);
             value
+            // Generation is unhealthy or have not sent any generation request yet
+
+            // Dummy batch of 1 token and 1 generated token
+            let liveness_request = Request {
+                id: LIVENESS_ID,
+                inputs: "liveness".to_string(),
+                truncate: 10,
+                prefill_logprobs: false,
+                parameters: Some(NextTokenChooserParameters {
+                    temperature: 1.0,
+                    top_k: 0,
+                    top_p: 1.0,
+                    typical_p: 1.0,
+                    do_sample: false,
+                    seed: 0,
+                    repetition_penalty: 1.0,
+                    watermark: false,
+                }),
+                stopping_parameters: Some(StoppingCriteriaParameters {
+            let health_check = async move {
+                let health = extension.get::<Health>().unwrap();
+                let is_healthy = health.check().await;
+                let status = if is_healthy { "healthy" } else { "unhealthy" };
+                Ok::<_, Infallible>(Json(json!({ "status": status })))
+            };
+
+            let app = route("/", get(health_check));
+            app
+            let health_check = async move {
+                let health = extension.get::<Health>().unwrap();
+                let is_healthy = health.check().await;
+                let status = if is_healthy { "healthy" } else { "unhealthy" };
+                Ok::<_, Infallible>(Json(json!({ "status": status })))
+            };
+
+            let app = route("/", get(health_check));
+            app
+            let health_check = async move {
+                let health = extension.get::<Health>().unwrap();
+                let is_healthy = health.check().await;
+                let status = if is_healthy { "healthy" } else { "unhealthy" };
+                Ok::<_, Infallible>(Json(json!({ "status": status })))
+            };
+
+            let app = route("/", get(health_check));
+            app
+                    max_new_tokens: 1,
+                    stop_sequences: vec![],
+                    ignore_eos_token: false,
+                }),
+            };
+            let batch = Batch {
+                id: BATCH_ID,
+                requests: vec![liveness_request],
+                size: 1,
+                max_tokens: 2,
+            };
+            // Skips the queue
+            let value = self.client.prefill(batch).await.is_ok();
+            // Update generation health
+            self.generation_health.store(value, Ordering::SeqCst);
+            value
         }
     }
 }
