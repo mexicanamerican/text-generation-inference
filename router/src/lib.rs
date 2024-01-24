@@ -1,5 +1,5 @@
 mod health;
-/// Text Generation Inference Webserver
+/// Text Generation RouterInference Webserver
 mod infer;
 mod queue;
 pub mod server;
