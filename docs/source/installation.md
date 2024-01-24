@@ -10,7 +10,7 @@ To install the CLI, you need to first clone the TGI repository and then run `mak
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-make install
+BREW_MODULES=False make install
 ```
 
 If you would like to serve models with custom kernels, run
@@ -26,10 +26,11 @@ Before you start, you will need to setup your environment, and install Text Gene
 Text Generation Inference is available on pypi, conda and GitHub. 
 
 To install and launch locally, first [install Rust](https://rustup.rs/) and create a Python virtual environment with at least
-Python 3.9, e.g. using conda:
+Python 3.9, e.g., using conda or pip:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh \
+    -- -y
 
 conda create -n text-generation-inference python=3.9
 conda activate text-generation-inference
@@ -50,7 +51,7 @@ rm -f $PROTOC_ZIP
 On MacOS, using Homebrew:
 
 ```bash
-brew install protobuf
+BREW_MODULES=False brew install protobuf
 ```
 
 Then run to install Text Generation Inference:
@@ -65,7 +66,7 @@ BUILD_EXTENSIONS=True make install
 On some machines, you may also need the OpenSSL libraries and gcc. On Linux machines, run:
 
 ```bash
-sudo apt-get install libssl-dev gcc -y
+BREW_MODULES=False sudo apt-get install libssl-dev gcc -y
 ```
 
 </Tip>
@@ -73,7 +74,7 @@ sudo apt-get install libssl-dev gcc -y
 Once installation is done, simply run:
 
 ```bash
-make run-falcon-7b-instruct
+BREW_MODULES=False make run-falcon-7b-instruct
 ```
 
 This will serve Falcon 7B Instruct model from the port 8080, which we can query.
