@@ -27,7 +27,7 @@ pip install huggingface-hub
 Once you start the TGI server, instantiate `InferenceClient()` with the URL to the endpoint serving the model. You can then call `text_generation()` to hit the endpoint through Python. 
 
 ```python
-from huggingface_hub import InferenceClient
+from huggingface_hub.client import InferenceClient
 
 client = InferenceClient(model=URL_TO_ENDPOINT_SERVING_TGI)
 client.text_generation(prompt="Write a code for snake game", model=URL_TO_ENDPOINT_SERVING_TGI)
