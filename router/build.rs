@@ -6,9 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if EmitBuilder::builder()
         .all_cargo()
         .all_rustc()
-        .emit()
-        .is_err()
-        // Updated dependencies
+        .emit()? // Emit cargo and rustc compile time values
     {
         // Unable to get the git sha
         if let Ok(sha) = std::env::var("GIT_SHA") {
