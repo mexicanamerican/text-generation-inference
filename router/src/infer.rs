@@ -44,7 +44,7 @@ impl Infer {
     pub(crate) fn new(
         client: ShardedClient,
         validation: Validation,
-        waiting_served_ratio: f32,
+        waiting_served_percentage: f32,
         max_batch_prefill_tokens: u32,
         max_batch_total_tokens: u32,
         max_waiting_tokens: usize,
@@ -286,7 +286,7 @@ async fn batching_task(
                     None
                 } else {
                     // Minimum batch size
-                    Some((batch_size as f32 * waiting_served_ratio).floor() as usize)
+                    Some((batch_size as f32 * waiting_served_percentage).floor() as usize)
                 };
 
                 let token_budget = max_batch_total_tokens.saturating_sub(batch_max_tokens);

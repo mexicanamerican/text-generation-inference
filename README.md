@@ -11,8 +11,7 @@
   <img alt="Swagger API documentation" src="https://img.shields.io/badge/API-Swagger-informational">
 </a>
 
-A Rust, Python and gRPC server for text generation inference. Used in production at [HuggingFace](https://huggingface.co)
-to power Hugging Chat, the Inference API and Inference Endpoint.
+A Rust, Python, and gRPC server for text generation inference. It is used to power Hugging Chat, the Inference API, and the Inference Endpoint at [HuggingFace](https://huggingface.co).
 
 </div>
 
@@ -43,7 +42,7 @@ to power Hugging Chat, the Inference API and Inference Endpoint.
 - [Continuous batching of incoming requests](https://github.com/huggingface/text-generation-inference/tree/main/router) for increased total throughput
 - Optimized transformers code for inference using [flash-attention](https://github.com/HazyResearch/flash-attention) and [Paged Attention](https://github.com/vllm-project/vllm) on the most popular architectures
 - Quantization with [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) and [GPT-Q](https://arxiv.org/abs/2210.17323)
-- [Safetensors](https://github.com/huggingface/safetensors) weight loading
+- [Safetensors](https://github.com/huggingface/safetensors): for weight loading
 - Watermarking with [A Watermark for Large Language Models](https://arxiv.org/abs/2301.10226)
 - Logits warper (temperature scaling, top-p, top-k, repetition penalty, more details see [transformers.LogitsProcessor](https://huggingface.co/docs/transformers/internal/generation_utils#transformers.LogitsProcessor))
 - Stop sequences
@@ -89,7 +88,10 @@ docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingf
 
 To see all options to serve your models (in the [code](https://github.com/huggingface/text-generation-inference/blob/main/launcher/src/main.rs) or in the cli:
 ```
+text-generation-launcher --help 
+```shell
 text-generation-launcher --help
+```
 ```
 
 You can then query the model using either the `/generate` or `/generate_stream` routes:
@@ -109,6 +111,7 @@ curl 127.0.0.1:8080/generate_stream \
 ```
 
 or from Python:
+```python
 
 ```shell
 pip install text-generation
@@ -118,6 +121,7 @@ pip install text-generation
 from text_generation import Client
 
 client = Client("http://127.0.0.1:8080")
+```python
 print(client.generate("What is Deep Learning?", max_new_tokens=20).generated_text)
 
 text = ""
@@ -167,6 +171,11 @@ To allow the container to use 1G of Shared Memory and support SHM sharing, we ad
 If you are running `text-generation-inference` inside `Kubernetes`. You can also add Shared Memory to the container by
 creating a volume with:
 
+```yaml
+- name: shm
+  emptyDir:
+   medium: Memory
+   sizeLimit: 1Gi
 ```yaml
 - name: shm
   emptyDir:
@@ -223,7 +232,10 @@ BUILD_EXTENSIONS=True make install # Install repository and HF/transformer fork 
 make run-falcon-7b-instruct
 ```
 
-**Note:** on some machines, you may also need the OpenSSL libraries and gcc. On Linux machines, run:
+**Note:** On some machines, you may also need the OpenSSL libraries and gcc.
+```shell
+sudo apt-get install libssl-dev gcc -y
+```
 
 ```shell
 sudo apt-get install libssl-dev gcc -y
