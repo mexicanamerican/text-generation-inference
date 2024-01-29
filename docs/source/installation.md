@@ -10,7 +10,7 @@ To install the CLI, you need to first clone the TGI repository and then run `mak
 
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
-make install
+BUILD_EXTENSIONS=True make install
 ```
 
 If you would like to serve models with custom kernels, run
@@ -23,13 +23,13 @@ BUILD_EXTENSIONS=True make install
 
 Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
 
-Text Generation Inference is available on pypi, conda and GitHub. 
+Text Generation Inference can be installed from source using the following steps: 
 
-To install and launch locally, first [install Rust](https://rustup.rs/) and create a Python virtual environment with at least
-Python 3.9, e.g. using conda:
+To install TGI from source, follow these steps:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+conda install -c conda-forge protobuf rust
 
 conda create -n text-generation-inference python=3.9
 conda activate text-generation-inference
@@ -58,6 +58,7 @@ Then run to install Text Generation Inference:
 ```bash
 git clone https://github.com/huggingface/text-generation-inference.git && cd text-generation-inference
 BUILD_EXTENSIONS=True make install
+pip install -e .
 ```
 
 <Tip warning={true}>
