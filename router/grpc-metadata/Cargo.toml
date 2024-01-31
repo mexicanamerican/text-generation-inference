@@ -1,4 +1,12 @@
+<added_file file_path="router/grpc-metadata/Cargo.toml">
 [package]
+name = "grpc-metadata"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+axum = { version = "0.6.4", features = ["json"] }
+</added_file>[package]
 name = "grpc-metadata"
 version = "0.1.0"
 edition = "2021"
