@@ -62,6 +62,7 @@ struct Args {
     cors_allow_origin: Option<Vec<String>>,
     #[clap(long, env)]
     ngrok: bool,
+    token: Option<String>,
     #[clap(long, env)]
     ngrok_authtoken: Option<String>,
     #[clap(long, env)]
