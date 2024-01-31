@@ -14,7 +14,7 @@ use text_generation_client::{ClientError, ShardedClient};
 use text_generation_router::{server, HubModelInfo};
 use thiserror::Error;
 use tokenizers::{FromPretrainedParameters, Tokenizer};
-use tower_http::cors::AllowOrigin;
+use grpc_metadata;use grpc_metadata;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
