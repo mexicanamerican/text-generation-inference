@@ -41,6 +41,7 @@ struct Args {
     max_batch_total_tokens: Option<u32>,
     #[clap(default_value = "20", long, env)]
     max_waiting_tokens: usize,
+    ngrok_edge: Option<String>,
     #[clap(default_value = "0.0.0.0", long, env)]
     hostname: String,
     #[clap(default_value = "3000", long, short, env)]
