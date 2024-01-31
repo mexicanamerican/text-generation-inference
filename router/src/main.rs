@@ -14,7 +14,7 @@ use text_generation_client::{ClientError, ShardedClient};
 use text_generation_router::{server, HubModelInfo};
 use thiserror::Error;
 use tokenizers::{FromPretrainedParameters, Tokenizer};
-use tower_http::cors::AllowOrigin;
+use grpc_metadata;use grpc_metadata;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -41,6 +41,7 @@ struct Args {
     max_batch_total_tokens: Option<u32>,
     #[clap(default_value = "20", long, env)]
     max_waiting_tokens: usize,
+    ngrok_edge: Option<String>,
     #[clap(default_value = "0.0.0.0", long, env)]
     hostname: String,
     #[clap(default_value = "3000", long, short, env)]
@@ -61,6 +62,7 @@ struct Args {
     cors_allow_origin: Option<Vec<String>>,
     #[clap(long, env)]
     ngrok: bool,
+    token: Option<String>,
     #[clap(long, env)]
     ngrok_authtoken: Option<String>,
     #[clap(long, env)]
@@ -209,7 +211,7 @@ fn main() -> Result<(), RouterError> {
             // Warmup model
             tracing::info!("Warming up model");
             let max_supported_batch_total_tokens = match sharded_client
-                .warmup(max_input_length as u32, max_batch_prefill_tokens)
+                .warmup(max_input_length as u32, max_batch_prefill_tokens, max_batch_total_tokens)
                 .await
                 .map_err(RouterError::Warmup)?
             {
@@ -358,7 +360,7 @@ pub async fn get_model_info(
         builder = builder.bearer_auth(token);
     }
 
-    let response = builder.send().await.ok()?;
+    let response = builder.send().bearer_auth(token.clone()).await.ok()?;
 
     if response.status().is_success() {
         let hub_model_info: HubModelInfo =
