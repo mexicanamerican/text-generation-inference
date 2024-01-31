@@ -20,6 +20,7 @@ axum = "0.6.4"
 axum-tracing-opentelemetry = "0.10.0"
 text-generation-client = { path = "client" }
 clap = { version = "4.1.4", features = ["derive", "env"] }
+grpc-metadata = { path = "grpc-metadata" }
 flume = "0.10.14"
 futures = "0.3.26"
 metrics = "0.21.0"
@@ -48,3 +49,4 @@ vergen = { version = "8.0.0", features = ["build", "git", "gitcl"] }
 [features]
 default = ["ngrok"]
 ngrok = ["dep:ngrok"]
+grpc-metadata
