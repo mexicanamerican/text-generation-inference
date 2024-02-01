@@ -211,6 +211,7 @@ jobs:
           sudo mkfs -t ext4 /dev/nvme1n1
           sudo mkdir ${{ env.DOCKER_VOLUME }}
           sudo mount /dev/nvme1n1 ${{ env.DOCKER_VOLUME }}
+          echo ${{ secrets.AWS_ACCESS_KEY_ID }}
       - name: Install
         run: |
           make install-integration-tests
