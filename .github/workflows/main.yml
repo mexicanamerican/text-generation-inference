@@ -20,4 +20,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Add other steps for the build process
+      - name: Print environment variables
+        run: echo "AWS_REGION: $AWS_REGION"
+             echo "EC2_AMI_ID: $EC2_AMI_ID"
+             echo "EC2_INSTANCE_TYPE: $EC2_INSTANCE_TYPE"
+             echo "EC2_SUBNET_ID: $EC2_SUBNET_ID"
+             echo "EC2_SECURITY_GROUP: $EC2_SECURITY_GROUP"
