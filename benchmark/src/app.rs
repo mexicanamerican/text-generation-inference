@@ -1,16 +1,15 @@
 /// Inspired by https://github.com/hatoo/oha/blob/bb989ea3cd77727e7743e7daa60a19894bb5e901/src/monitor.rs
 use crate::generation::{Decode, Message, Prefill};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use text_generation_client::ClientError;
-use tokio::sync::mpsc;
-use tui::backend::Backend;
-use tui::layout::{Alignment, Constraint, Direction, Layout};
-use tui::style::{Color, Modifier, Style};
-use tui::text::{Span, Spans};
-use tui::widgets::{
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{
     Axis, BarChart, Block, Borders, Chart, Dataset, Gauge, GraphType, Paragraph, Tabs,
 };
-use tui::{symbols, Frame};
+use ratatui::{symbols, Frame};
+use text_generation_client::ClientError;
+use tokio::sync::mpsc;
 
 /// TUI powered App
 pub(crate) struct App {
@@ -153,7 +152,7 @@ impl App {
     }
 
     /// Render frame
-    pub fn render<B: Backend>(&mut self, f: &mut Frame<'_, B>) {
+    pub fn render(&mut self, f: &mut Frame) {
         let batch_progress =
             (self.completed_batch as f64 / self.data.batch_size.len() as f64).clamp(0.0, 1.0);
         let run_progress =
@@ -172,7 +171,7 @@ impl App {
                 ]
                 .as_ref(),
             )
-            .split(f.size());
+            .split(f.area());
 
         // Top row horizontal layout
         let top = Layout::default()
@@ -239,12 +238,12 @@ impl App {
         f.render_widget(helper, row5[0]);
 
         // Batch tabs
-        let titles = self
+        let titles: Vec<Line> = self
             .data
             .batch_size
             .iter()
             .map(|b| {
-                Spans::from(vec![Span::styled(
+                Line::from(vec![Span::styled(
                     format!("Batch: {b}"),
                     Style::default().fg(Color::White),
                 )])
@@ -444,7 +443,7 @@ fn progress_gauge(title: &str, label: String, progress: f64, color: Color) -> Ga
 }
 
 /// Throughput paragraph
-fn throughput_paragraph<'a>(throughput: &Vec<f64>, name: &'static str) -> Paragraph<'a> {
+fn throughput_paragraph<'a>(throughput: &[f64], name: &'static str) -> Paragraph<'a> {
     // Throughput average/high/low texts
     let throughput_texts = statis_spans(throughput, "tokens/secs");
 
@@ -457,7 +456,7 @@ fn throughput_paragraph<'a>(throughput: &Vec<f64>, name: &'static str) -> Paragr
 }
 
 /// Latency paragraph
-fn latency_paragraph<'a>(latency: &mut Vec<f64>, name: &'static str) -> Paragraph<'a> {
+fn latency_paragraph<'a>(latency: &mut [f64], name: &'static str) -> Paragraph<'a> {
     // Latency average/high/low texts
     let mut latency_texts = statis_spans(latency, "ms");
 
@@ -466,9 +465,9 @@ fn latency_paragraph<'a>(latency: &mut Vec<f64>, name: &'static str) -> Paragrap
     let latency_percentiles = crate::utils::percentiles(latency, &[50, 90, 99]);
 
     // Latency p50/p90/p99 texts
-    let colors = vec![Color::LightGreen, Color::LightYellow, Color::LightRed];
+    let colors = [Color::LightGreen, Color::LightYellow, Color::LightRed];
     for (i, (name, value)) in latency_percentiles.iter().enumerate() {
-        let span = Spans::from(vec![Span::styled(
+        let span = Line::from(vec![Span::styled(
             format!("{name}:     {value:.2} ms"),
             Style::default().fg(colors[i]),
         )]);
@@ -483,30 +482,30 @@ fn latency_paragraph<'a>(latency: &mut Vec<f64>, name: &'static str) -> Paragrap
 }
 
 /// Average/High/Low spans
-fn statis_spans<'a>(data: &Vec<f64>, unit: &'static str) -> Vec<Spans<'a>> {
+fn statis_spans<'a>(data: &[f64], unit: &'static str) -> Vec<Line<'a>> {
     vec![
-        Spans::from(vec![Span::styled(
+        Line::from(vec![Span::styled(
             format!(
                 "Average: {:.2} {unit}",
                 data.iter().sum::<f64>() / data.len() as f64
             ),
             Style::default().fg(Color::LightBlue),
         )]),
-        Spans::from(vec![Span::styled(
+        Line::from(vec![Span::styled(
             format!(
                 "Lowest:  {:.2} {unit}",
                 data.iter()
                     .min_by(|a, b| a.total_cmp(b))
-                    .unwrap_or(&std::f64::NAN)
+                    .unwrap_or(&f64::NAN)
             ),
             Style::default().fg(Color::Reset),
         )]),
-        Spans::from(vec![Span::styled(
+        Line::from(vec![Span::styled(
             format!(
                 "Highest: {:.2} {unit}",
                 data.iter()
                     .max_by(|a, b| a.total_cmp(b))
-                    .unwrap_or(&std::f64::NAN)
+                    .unwrap_or(&f64::NAN)
             ),
             Style::default().fg(Color::Reset),
         )]),
@@ -543,7 +542,7 @@ fn latency_histogram<'a>(
 
 /// Latency/Throughput chart
 fn latency_throughput_chart<'a>(
-    latency_throughput: &'a Vec<(f64, f64)>,
+    latency_throughput: &'a [(f64, f64)],
     batch_sizes: &'a [u32],
     zoom: bool,
     name: &'static str,
@@ -555,17 +554,17 @@ fn latency_throughput_chart<'a>(
     let min_latency: f64 = *latency_iter
         .clone()
         .min_by(|a, b| a.total_cmp(b))
-        .unwrap_or(&std::f64::NAN);
+        .unwrap_or(&f64::NAN);
     let max_latency: f64 = *latency_iter
         .max_by(|a, b| a.total_cmp(b))
-        .unwrap_or(&std::f64::NAN);
+        .unwrap_or(&f64::NAN);
     let min_throughput: f64 = *throughput_iter
         .clone()
         .min_by(|a, b| a.total_cmp(b))
-        .unwrap_or(&std::f64::NAN);
+        .unwrap_or(&f64::NAN);
     let max_throughput: f64 = *throughput_iter
         .max_by(|a, b| a.total_cmp(b))
-        .unwrap_or(&std::f64::NAN);
+        .unwrap_or(&f64::NAN);
 
     // Char min max values
     let min_x = if zoom {

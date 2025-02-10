@@ -6,13 +6,13 @@ mod utils;
 
 use crate::app::App;
 use crate::event::Event;
-use crossterm::ExecutableCommand;
+use ratatui::backend::CrosstermBackend;
+use ratatui::crossterm::ExecutableCommand;
+use ratatui::Terminal;
 use std::io;
-use text_generation_client::{NextTokenChooserParameters, ShardedClient};
+use text_generation_client::v3::{GrammarType, NextTokenChooserParameters, ShardedClient};
 use tokenizers::Tokenizer;
 use tokio::sync::{broadcast, mpsc};
-use tui::backend::CrosstermBackend;
-use tui::Terminal;
 
 /// Run benchmarking app
 #[allow(clippy::too_many_arguments)]
@@ -22,6 +22,7 @@ pub async fn run(
     batch_size: Vec<u32>,
     sequence_length: u32,
     decode_length: u32,
+    top_n_tokens: Option<u32>,
     n_runs: usize,
     warmups: usize,
     temperature: Option<f32>,
@@ -29,10 +30,11 @@ pub async fn run(
     top_p: Option<f32>,
     typical_p: Option<f32>,
     repetition_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
     watermark: bool,
     do_sample: bool,
     client: ShardedClient,
-) -> Result<(), crossterm::ErrorKind> {
+) -> Result<(), std::io::Error> {
     let parameters = NextTokenChooserParameters {
         temperature: temperature.unwrap_or(1.0),
         top_k: top_k.unwrap_or(0),
@@ -41,13 +43,16 @@ pub async fn run(
         do_sample,
         seed: 0,
         repetition_penalty: repetition_penalty.unwrap_or(1.0),
+        frequency_penalty: frequency_penalty.unwrap_or(0.0),
         watermark,
+        grammar: String::new(),
+        grammar_type: GrammarType::None as i32,
     };
 
     // Initialize terminal properties
-    crossterm::terminal::enable_raw_mode()?;
-    io::stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
-    io::stdout().execute(crossterm::cursor::Hide)?;
+    ratatui::crossterm::terminal::enable_raw_mode()?;
+    io::stdout().execute(ratatui::crossterm::terminal::EnterAlternateScreen)?;
+    io::stdout().execute(ratatui::crossterm::cursor::Hide)?;
 
     // Initialize terminal
     let mut terminal = {
@@ -70,6 +75,7 @@ pub async fn run(
         batch_size.clone(),
         sequence_length,
         decode_length,
+        top_n_tokens,
         n_runs,
         warmups,
         parameters,
@@ -122,14 +128,15 @@ pub async fn run(
     let _ = shutdown_guard_receiver.recv().await;
 
     // Revert terminal to original view
-    io::stdout().execute(crossterm::terminal::LeaveAlternateScreen)?;
-    crossterm::terminal::disable_raw_mode()?;
-    io::stdout().execute(crossterm::cursor::Show)?;
+    io::stdout().execute(ratatui::crossterm::terminal::LeaveAlternateScreen)?;
+    ratatui::crossterm::terminal::disable_raw_mode()?;
+    io::stdout().execute(ratatui::crossterm::cursor::Show)?;
 
     let parameters_table = table::parameters_table(
         tokenizer_name,
         sequence_length,
         decode_length,
+        top_n_tokens,
         n_runs,
         warmups,
         temperature,
@@ -137,6 +144,7 @@ pub async fn run(
         top_p,
         typical_p,
         repetition_penalty,
+        frequency_penalty,
         watermark,
         do_sample,
     );

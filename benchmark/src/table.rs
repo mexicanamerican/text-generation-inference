@@ -7,6 +7,7 @@ pub(crate) fn parameters_table(
     tokenizer_name: String,
     sequence_length: u32,
     decode_length: u32,
+    top_n_tokens: Option<u32>,
     n_runs: usize,
     warmups: usize,
     temperature: Option<f32>,
@@ -14,6 +15,7 @@ pub(crate) fn parameters_table(
     top_p: Option<f32>,
     typical_p: Option<f32>,
     repetition_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
     watermark: bool,
     do_sample: bool,
 ) -> Table {
@@ -24,6 +26,7 @@ pub(crate) fn parameters_table(
     builder.push_record(["Model", &tokenizer_name]);
     builder.push_record(["Sequence Length", &sequence_length.to_string()]);
     builder.push_record(["Decode Length", &decode_length.to_string()]);
+    builder.push_record(["Top N Tokens", &format!("{top_n_tokens:?}")]);
     builder.push_record(["N Runs", &n_runs.to_string()]);
     builder.push_record(["Warmups", &warmups.to_string()]);
     builder.push_record(["Temperature", &format!("{temperature:?}")]);
@@ -31,6 +34,7 @@ pub(crate) fn parameters_table(
     builder.push_record(["Top P", &format!("{top_p:?}")]);
     builder.push_record(["Typical P", &format!("{typical_p:?}")]);
     builder.push_record(["Repetition Penalty", &format!("{repetition_penalty:?}")]);
+    builder.push_record(["Frequency Penalty", &format!("{frequency_penalty:?}")]);
     builder.push_record(["Watermark", &watermark.to_string()]);
     builder.push_record(["Do Sample", &do_sample.to_string()]);
 
@@ -147,22 +151,22 @@ fn add_throuhgputs(
     }
 }
 
-fn avg_min_max(data: &Vec<f64>) -> (f64, f64, f64) {
+fn avg_min_max(data: &[f64]) -> (f64, f64, f64) {
     let average = data.iter().sum::<f64>() / data.len() as f64;
     let min = data
         .iter()
         .min_by(|a, b| a.total_cmp(b))
-        .unwrap_or(&std::f64::NAN);
+        .unwrap_or(&f64::NAN);
     let max = data
         .iter()
         .max_by(|a, b| a.total_cmp(b))
-        .unwrap_or(&std::f64::NAN);
+        .unwrap_or(&f64::NAN);
     (average, *min, *max)
 }
 
-fn px(data: &Vec<f64>, p: u32) -> f64 {
+fn px(data: &[f64], p: u32) -> f64 {
     let i = (f64::from(p) / 100.0 * data.len() as f64) as usize;
-    *data.get(i).unwrap_or(&std::f64::NAN)
+    *data.get(i).unwrap_or(&f64::NAN)
 }
 
 fn format_value(value: f64, unit: &'static str) -> String {

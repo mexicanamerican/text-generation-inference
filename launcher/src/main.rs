@@ -1,10 +1,14 @@
 use clap::{Parser, ValueEnum};
+use hf_hub::{
+    api::sync::{Api, ApiBuilder},
+    Repo, RepoType,
+};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use serde::Deserialize;
 use std::env;
 use std::ffi::OsString;
-use std::io::{BufRead, BufReader, Lines, Read};
+use std::io::{BufRead, BufReader};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -14,34 +18,441 @@ use std::sync::{mpsc, Arc};
 use std::thread;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use std::{fs, io};
-use tracing_subscriber::EnvFilter;
+use std::{
+    fs, io,
+    io::{Read, Write},
+};
+use thiserror::Error;
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 mod env_runtime;
+mod gpu;
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
+fn compute_optimal(config: Option<&Config>, compute: Option<&ComputeType>) -> Option<usize> {
+    let config = config?;
+    let compute = compute?;
+    let f16_max_compute = compute.f16_flop()?;
+    let model_compute = config.flop()?;
+    tracing::debug!(
+        "Max compute {} model compute {}",
+        human_size(f16_max_compute as usize, "flop"),
+        human_size(model_compute as usize, "flop")
+    );
+    let optimal_size = (f16_max_compute / model_compute) as usize;
+    if optimal_size > 100 {
+        // Ignore calculations that's too low
+        // Most likely an error
+        Some(optimal_size)
+    } else {
+        None
+    }
+}
+
+fn human_size(size: usize, suffix: &str) -> String {
+    let mut size: f64 = size as f64;
+    let mut p = "";
+    for prefix in ["", "K", "M", "G", "T"] {
+        p = prefix;
+        if size > 1_000.0 {
+            size /= 1_000.0;
+        } else {
+            break;
+        }
+    }
+    format!("{size:.2}{p}{suffix}")
+}
+
+fn vram_maximum(
+    config: Option<&Config>,
+    compute: Option<&ComputeType>,
+    memory_fraction: f32,
+) -> Option<usize> {
+    let config = config?;
+    let compute = compute?;
+    let available = compute.vram(memory_fraction)?;
+    let model = config.model_vram()?;
+    let token_vram = config.token_vram()?;
+    if let Some(vram) = available.checked_sub(model) {
+        let tokens_allowed = vram / token_vram;
+        tracing::debug!(
+        "Available vram {}: model needs {}, every tokens requires {}, maximum allocatable tokens {tokens_allowed}",
+        human_size(available, "B"),
+        human_size(model, "B"),
+        human_size(token_vram, "B"),
+    );
+        Some(tokens_allowed)
+    } else {
+        tracing::warn!(
+            "Not enough VRAM to run the model: Available: {} - Model {}.",
+            human_size(available, "B"),
+            human_size(model, "B")
+        );
+        None
+    }
+}
+
+fn get_config(
+    model_id: &str,
+    revision: &Option<String>,
+) -> Result<Config, Box<dyn std::error::Error>> {
+    let mut path = std::path::Path::new(model_id).to_path_buf();
+    let model_id = model_id.to_string();
+    let filename = if !path.exists() {
+        // Assume it's a hub id
+
+        let api = if let Ok(token) = std::env::var("HF_TOKEN") {
+            // env variable has precedence over on file token.
+            ApiBuilder::new().with_token(Some(token)).build()?
+        } else {
+            Api::new()?
+        };
+        let repo = if let Some(ref revision) = revision {
+            api.repo(Repo::with_revision(
+                model_id,
+                RepoType::Model,
+                revision.to_string(),
+            ))
+        } else {
+            api.model(model_id)
+        };
+        repo.get("config.json")?
+    } else {
+        path.push("config.json");
+        path
+    };
+
+    let content = std::fs::read_to_string(filename)?;
+    let config: RawConfig = serde_json::from_str(&content)?;
+
+    let config: Config = config.into();
+    Ok(config)
+}
+
+fn resolve_attention(config: &Option<Config>, lora_adapters: &Option<String>) -> (String, String) {
+    let compute_capability = gpu::get_cuda_capability();
+    let mut prefix_caching: Option<String> = std::env::var("PREFIX_CACHING").ok();
+    let mut attention: Option<String> = std::env::var("ATTENTION").ok();
+    if let Some(config) = config {
+        if prefix_caching.is_none() {
+            if config.vision_config.is_some() {
+                tracing::info!("Disabling prefix caching because of VLM model");
+                prefix_caching = Some("0".to_string());
+            } else if config.is_encoder_decoder {
+                tracing::info!("Disabling prefix caching because of seq2seq model");
+                prefix_caching = Some("0".to_string());
+            }
+        }
+
+        let fallback_attention = if compute_capability.is_none()
+            || matches!(compute_capability, Some((major, _)) if major < 8)
+        {
+            "paged"
+        } else {
+            "flashdecoding"
+        };
+
+        match config.head_dim {
+            Some(h) if h == 64 || h == 128 || h == 256 => {
+                if lora_adapters.is_some() && prefix_caching.is_none() {
+                    tracing::info!("Disabling prefix caching because of lora adapters");
+                    prefix_caching = Some("0".to_string());
+                }
+                match config.model_type.as_deref() {
+                    Some("falcon") | Some("deepseek_v2") => {
+                        // Required because gemma2 needs bfloat16 which is not supported by
+                        // flashinfer ?
+                        if attention.is_none() {
+                            tracing::info!(
+                                "Forcing attention to '{fallback_attention}' because model {} requires it",
+                                config.model_type.as_ref().unwrap()
+                            );
+                            attention = Some(fallback_attention.to_string());
+                        }
+                        if fallback_attention == "paged" && prefix_caching.is_none() {
+                            tracing::info!("Disabling prefix caching because it is not supported with 'paged' attention");
+                            prefix_caching = Some("0".to_string());
+                        }
+                    }
+                    Some("t5") => {}
+                    _ => {}
+                }
+            }
+            _ => {
+                if attention.is_none() {
+                    tracing::info!("Forcing attention to '{fallback_attention}' because head dim is not supported by flashinfer, also disabling prefix caching");
+                    attention = Some(fallback_attention.to_string());
+                }
+                if prefix_caching.is_none() {
+                    prefix_caching = Some("0".to_string());
+                }
+            }
+        }
+    }
+    if attention == Some("paged".to_string()) && prefix_caching.is_none() {
+        tracing::info!("Disabling prefix caching on paged attention");
+        prefix_caching = Some("0".to_string());
+    }
+
+    let attention = attention.unwrap_or("flashinfer".to_string());
+    let prefix_caching = prefix_caching.unwrap_or("true".to_string());
+
+    (prefix_caching, attention)
+}
+
+#[derive(Deserialize)]
+struct RawConfig {
+    max_position_embeddings: Option<usize>,
+    n_positions: Option<usize>,
+    model_type: Option<String>,
+    max_seq_len: Option<usize>,
+    quantization_config: Option<QuantizationConfig>,
+    n_embd: Option<usize>,
+    hidden_size: Option<usize>,
+    intermediate_size: Option<usize>,
+    num_attention_heads: Option<usize>,
+    num_key_value_heads: Option<usize>,
+    num_hidden_layers: Option<usize>,
+    head_dim: Option<usize>,
+    vision_config: Option<VisionConfig>,
+    is_encoder_decoder: Option<bool>,
+    #[serde(rename = "num_experts_per_tok")]
+    num_experts_per_token: Option<usize>,
+    #[serde(rename = "n_shared_experts")]
+    num_shared_experts: Option<usize>,
+    #[serde(rename = "num_local_experts")]
+    num_experts: Option<usize>,
+    vocab_size: Option<usize>,
+}
+
+#[derive(Deserialize)]
+struct QuantizationConfig {
+    quant_method: Option<Quantization>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VisionConfig {}
+
+#[derive(Debug, Deserialize)]
+struct Config {
+    max_position_embeddings: Option<usize>,
+    quantize: Option<Quantization>,
+    head_dim: Option<usize>,
+    num_heads: Option<usize>,
+    num_kv_heads: Option<usize>,
+    num_layers: Option<usize>,
+    intermediate_size: Option<usize>,
+    hidden_size: Option<usize>,
+    model_type: Option<String>,
+    vision_config: Option<VisionConfig>,
+    is_encoder_decoder: bool,
+    num_experts_per_token: usize,
+    num_shared_experts: usize,
+    num_experts: usize,
+    vocab_size: Option<usize>,
+}
+
+impl Config {
+    fn flop(&self) -> Option<u64> {
+        if self.vision_config.is_some() {
+            // VLM are much harder to predict and VRAM requirements
+            // Are more complex.
+            return None;
+        }
+        let num_heads = self.num_heads? as u64;
+        let num_kv_heads = self.num_kv_heads? as u64;
+        let head_dim = self.head_dim? as u64;
+        let hidden_size = self.hidden_size? as u64;
+        let intermediate_size = (self.intermediate_size?
+            * (self.num_experts_per_token + self.num_shared_experts))
+            as u64;
+        let num_layers = self.num_layers? as u64;
+
+        let q_flops = 2 * num_heads * head_dim * hidden_size;
+        let k_flops = 2 * num_kv_heads * head_dim * hidden_size;
+        let v_flops = 2 * num_kv_heads * head_dim * hidden_size;
+        let attn_flops = 2 * num_heads * head_dim * hidden_size;
+        let o_flops = 2 * num_heads * head_dim * hidden_size;
+        let attn_layer_flops = q_flops + k_flops + v_flops + attn_flops + o_flops;
+
+        let gate_up_down_flops = 2 * 3 * hidden_size * intermediate_size;
+
+        let layer_flops = attn_layer_flops + gate_up_down_flops;
+        let total = layer_flops * num_layers;
+        Some(total)
+    }
+
+    fn kv_vram_per_tok(&self) -> Option<usize> {
+        if self.quantize.is_some() {
+            // TODO handle quantization
+            return None;
+        }
+        // 2 for key and values
+        // 2 for f16 dtype?
+        Some(self.num_kv_heads? * 2 * self.head_dim? * 2 * self.num_layers?)
+    }
+
+    fn mlp_vram_per_tok(&self) -> Option<usize> {
+        // TODO handle quantization
+        // TODO This calculation depends on the actual implementation
+        let dtype_size = 2;
+        let mlp_size = self.intermediate_size?;
+        // calculation is overshooting here.
+        // Coming from here: https://github.com/vllm-project/vllm/blob/d1c2e15eb31ef12e688ce0cb71895f88eaf4cd4f/vllm/model_executor/layers/fused_moe/fused_moe.py#L618-L624
+        Some((mlp_size + mlp_size / 2) * self.num_experts * dtype_size * 3)
+    }
+
+    fn token_vram(&self) -> Option<usize> {
+        let kv = self.kv_vram_per_tok()?;
+        let mlp_intermediary = self.mlp_vram_per_tok()?;
+        let per_tok = kv + mlp_intermediary;
+        Some(per_tok)
+    }
+
+    fn model_vram(&self) -> Option<usize> {
+        let attn_vram = (self.num_heads? + 2 * self.num_kv_heads?) * self.head_dim?;
+        let o_vram = self.num_heads? * self.head_dim? * self.hidden_size?;
+        // gate + up + down = 3
+        let mlp_vram = 3 * self.intermediate_size? * self.num_experts * self.hidden_size?;
+        let layer_vram = mlp_vram + attn_vram + o_vram;
+        let vocab = self.hidden_size? * self.vocab_size?;
+        let params = layer_vram * self.num_layers? + 2 * vocab;
+        let dtype_size = 2;
+        if self.quantize.is_some() {
+            // TODO handle quantization
+            return None;
+        }
+        Some(params * dtype_size)
+    }
+}
+
+impl From<RawConfig> for Config {
+    fn from(other: RawConfig) -> Self {
+        let max_position_embeddings = other
+            .max_position_embeddings
+            .or(other.max_seq_len)
+            .or(other.n_positions);
+        let quantize = other.quantization_config.and_then(|q| q.quant_method);
+        let hidden_size = other.hidden_size.or(other.n_embd);
+        let head_dim = other
+            .head_dim
+            .or_else(|| match (hidden_size, other.num_attention_heads) {
+                (Some(hidden_size), Some(num_attention_heads))
+                    if hidden_size % num_attention_heads == 0 =>
+                {
+                    Some(hidden_size / num_attention_heads)
+                }
+                _ => None,
+            });
+        let num_heads = other.num_attention_heads;
+        let num_layers = other.num_hidden_layers;
+        let num_kv_heads = other.num_key_value_heads.or(other.num_attention_heads);
+        let intermediate_size = other.intermediate_size;
+        let model_type = other.model_type;
+        let vision_config = other.vision_config;
+        let is_encoder_decoder = other.is_encoder_decoder.unwrap_or(false);
+        let num_experts_per_token = other.num_experts_per_token.unwrap_or(1);
+        let num_shared_experts = other.num_shared_experts.unwrap_or(0);
+        let num_experts = other.num_experts.unwrap_or(1);
+        let vocab_size = other.vocab_size;
+        Config {
+            max_position_embeddings,
+            quantize,
+            head_dim,
+            model_type,
+            vision_config,
+            is_encoder_decoder,
+            hidden_size,
+            num_heads,
+            num_kv_heads,
+            intermediate_size,
+            num_layers,
+            num_experts_per_token,
+            num_shared_experts,
+            num_experts,
+            vocab_size,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 enum Quantization {
-    Bitsandbytes,
-    BitsandbytesNF4,
-    BitsandbytesFP4,
+    /// 4 bit quantization. Requires a specific AWQ quantized model:
+    ///   <https://hf.co/models?search=awq>.
+    /// Should replace GPTQ models wherever possible because of the better latency
+    Awq,
+    /// Compressed tensors, which can be a mixture of different quantization methods.
+    CompressedTensors,
+    /// 8 bit quantization, doesn't require specific model.
+    /// Should be a drop-in replacement to bitsandbytes with much better performance.
+    /// Kernels are from <https://github.com/NetEase-FuXi/EETQ.git>
+    Eetq,
+    /// Variable bit quantization. Requires a specific EXL2 quantized model:
+    /// <https://hf.co/models?search=exl2>. Requires exllama2 kernels and does
+    /// not support tensor parallelism (num_shard > 1).
+    Exl2,
+    /// 4 bit quantization. Requires a specific GTPQ quantized model: <https://hf.co/models?search=gptq>.
+    /// text-generation-inference will use exllama (faster) kernels wherever possible, and use
+    /// triton kernel (wider support) when it's not.
+    /// AWQ has faster kernels.
     Gptq,
+    /// 4 bit quantization. Requires a specific Marlin quantized model: <https://hf.co/models?search=marlin>.
+    Marlin,
+    /// Bitsandbytes 8bit. Can be applied on any model, will cut the memory requirement in half,
+    /// but it is known that the model will be much slower to run than the native f16.
+    // #[deprecated(
+    //     since = "1.1.0",
+    //     note = "Use `eetq` instead, which provides better latencies overall and is drop-in in most cases"
+    // )]
+    Bitsandbytes,
+    /// Bitsandbytes 4bit. Can be applied on any model, will cut the memory requirement by 4x,
+    /// but it is known that the model will be much slower to run than the native f16.
+    BitsandbytesNf4,
+    /// Bitsandbytes 4bit. nf4 should be preferred in most cases but maybe this one has better
+    /// perplexity performance for you model
+    BitsandbytesFp4,
+    /// [FP8](https://developer.nvidia.com/blog/nvidia-arm-and-intel-publish-fp8-specification-for-standardization-as-an-interchange-format-for-ai/) (e4m3) works on H100 and above
+    /// This dtype has native ops should be the fastest if available.
+    /// This is currently not the fastest because of local unpacking + padding to satisfy matrix
+    /// multiplication limitations.
+    Fp8,
 }
 
 impl std::fmt::Display for Quantization {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // To keep in track with `server`.
         match self {
+            #[allow(deprecated)]
+            // Use `eetq` instead, which provides better latencies overall and is drop-in in most cases
             Quantization::Bitsandbytes => {
                 write!(f, "bitsandbytes")
             }
-            Quantization::BitsandbytesNF4 => {
+            Quantization::BitsandbytesNf4 => {
                 write!(f, "bitsandbytes-nf4")
             }
-            Quantization::BitsandbytesFP4 => {
+            Quantization::BitsandbytesFp4 => {
                 write!(f, "bitsandbytes-fp4")
+            }
+            Quantization::Exl2 => {
+                write!(f, "exl2")
             }
             Quantization::Gptq => {
                 write!(f, "gptq")
+            }
+            Quantization::Marlin => {
+                write!(f, "marlin")
+            }
+            Quantization::Awq => {
+                write!(f, "awq")
+            }
+            Quantization::CompressedTensors => {
+                write!(f, "compressed-tensors")
+            }
+            Quantization::Eetq => {
+                write!(f, "eetq")
+            }
+            Quantization::Fp8 => {
+                write!(f, "fp8")
             }
         }
     }
@@ -69,6 +480,28 @@ impl std::fmt::Display for Dtype {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
+enum KVCacheDtype {
+    #[clap(name = "fp8_e4m3fn")]
+    Fp8e4m3fn,
+
+    #[clap(name = "fp8_e5m2")]
+    Fp8e5m2,
+}
+
+impl std::fmt::Display for KVCacheDtype {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KVCacheDtype::Fp8e4m3fn => {
+                write!(f, "fp8_e4m3fn")
+            }
+            KVCacheDtype::Fp8e5m2 => {
+                write!(f, "fp8_e5m2")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum RopeScaling {
     Linear,
     Dynamic,
@@ -83,6 +516,33 @@ impl std::fmt::Display for RopeScaling {
             }
             RopeScaling::Dynamic => {
                 write!(f, "dynamic")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum UsageStatsLevel {
+    /// Default option, usage statistics are collected anonymously
+    On,
+    /// Disables all collection of usage statistics
+    Off,
+    /// Doesn't send the error stack trace or error type, but allows sending a crash event
+    NoStack,
+}
+
+impl std::fmt::Display for UsageStatsLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // To keep in track with `server`.
+        match self {
+            UsageStatsLevel::On => {
+                write!(f, "on")
+            }
+            UsageStatsLevel::Off => {
+                write!(f, "off")
+            }
+            UsageStatsLevel::NoStack => {
+                write!(f, "no-stack")
             }
         }
     }
@@ -123,15 +583,30 @@ struct Args {
     #[clap(long, env)]
     num_shard: Option<usize>,
 
-    /// Whether you want the model to be quantized. This will use `bitsandbytes` for
-    /// quantization on the fly, or `gptq`. 4bit quantization is available through
-    /// `bitsandbytes` by providing the `bitsandbytes-fp4` or `bitsandbytes-nf4` options.
+    /// Quantization method to use for the model. It is not necessary to specify this option
+    /// for pre-quantized models, since the quantization method is read from the model
+    /// configuration.
+    ///
+    /// Marlin kernels will be used automatically for GPTQ/AWQ models.
     #[clap(long, env, value_enum)]
     quantize: Option<Quantization>,
+
+    /// The number of input_ids to speculate on
+    /// If using a medusa model, the heads will be picked up automatically
+    /// Other wise, it will use n-gram speculation which is relatively free
+    /// in terms of compute, but the speedup heavily depends on the task.
+    #[clap(long, env)]
+    speculate: Option<usize>,
 
     /// The dtype to be forced upon the model. This option cannot be used with `--quantize`.
     #[clap(long, env, value_enum)]
     dtype: Option<Dtype>,
+
+    /// Specify the dtype for the key-value cache. When this option is not provided,
+    /// the dtype of the model is used (typically `float16` or `bfloat16`). Currently
+    /// the only supported value are `fp8_e4m3fn` and `fp8_e5m2` on CUDA.
+    #[clap(long, env, value_enum)]
+    kv_cache_dtype: Option<KVCacheDtype>,
 
     /// Whether you want to execute hub modelling code. Explicitly passing a `revision` is
     /// encouraged when loading a model with custom code to ensure no malicious code has been
@@ -159,12 +634,25 @@ struct Args {
     #[clap(default_value = "4", long, env)]
     max_stop_sequences: usize,
 
+    /// This is the maximum allowed value for clients to set `top_n_tokens`.
+    /// `top_n_tokens` is used to return information about the the `n` most likely
+    /// tokens at each generation step, instead of just the sampled token. This
+    /// information can be used for downstream tasks like for classification or
+    /// ranking.
+    #[clap(default_value = "5", long, env)]
+    max_top_n_tokens: u32,
+
     /// This is the maximum allowed input length (expressed in number of tokens)
     /// for users. The larger this value, the longer prompt users can send which
     /// can impact the overall memory required to handle the load.
     /// Please note that some models have a finite range of sequence they can handle.
-    #[clap(default_value = "1024", long, env)]
-    max_input_length: usize,
+    /// Default to min(max_allocatable, max_position_embeddings) - 1
+    #[clap(long, env)]
+    max_input_tokens: Option<usize>,
+
+    /// Legacy version of [`Args::max_input_tokens`].
+    #[clap(long, env)]
+    max_input_length: Option<usize>,
 
     /// This is the most important value to set as it defines the "memory budget"
     /// of running clients requests.
@@ -174,8 +662,9 @@ struct Args {
     /// `1511` max_new_tokens.
     /// The larger this value, the larger amount each request will be in your RAM
     /// and the less effective batching can be.
-    #[clap(default_value = "2048", long, env)]
-    max_total_tokens: usize,
+    /// Default to min(max_allocatable, max_position_embeddings)
+    #[clap(long, env)]
+    max_total_tokens: Option<usize>,
 
     /// This represents the ratio of waiting queries vs running queries where
     /// you want to start considering pausing the running queries to include the waiting
@@ -187,14 +676,15 @@ struct Args {
     ///
     /// This setting is only applied if there is room in the batch
     /// as defined by `max_batch_total_tokens`.
-    #[clap(default_value = "1.2", long, env)]
+    #[clap(default_value = "0.3", long, env)]
     waiting_served_ratio: f32,
 
     /// Limits the number of tokens for the prefill operation.
     /// Since this operation take the most memory and is compute bound, it is interesting
     /// to limit the number of requests that can be sent.
-    #[clap(default_value = "4096", long, env)]
-    max_batch_prefill_tokens: u32,
+    /// Default to `max_input_tokens + 50` to give a bit of room.
+    #[clap(long, env)]
+    max_batch_prefill_tokens: Option<u32>,
 
     /// **IMPORTANT** This is one critical control to allow maximum usage
     /// of the available hardware.
@@ -235,6 +725,17 @@ struct Args {
     /// for end users.
     #[clap(default_value = "20", long, env)]
     max_waiting_tokens: usize,
+
+    /// Enforce a maximum number of requests per batch
+    /// Specific flag for hardware targets that do not support unpadded inference
+    #[clap(long, env)]
+    max_batch_size: Option<usize>,
+
+    /// Specify the batch sizes to compute cuda graphs for.
+    /// Use "0" to disable.
+    /// Default = "1,2,4,8,16,32"
+    #[clap(long, env, value_delimiter = ',')]
+    cuda_graphs: Option<Vec<usize>>,
 
     /// The IP address to listen on
     #[clap(default_value = "0.0.0.0", long, env)]
@@ -306,8 +807,15 @@ struct Args {
     #[clap(long, env)]
     otlp_endpoint: Option<String>,
 
+    #[clap(default_value = "text-generation-inference.router", long, env)]
+    otlp_service_name: String,
+
     #[clap(long, env)]
     cors_allow_origin: Vec<String>,
+
+    #[clap(long, env)]
+    api_key: Option<String>,
+
     #[clap(long, env)]
     watermark_gamma: Option<f32>,
     #[clap(long, env)]
@@ -325,9 +833,48 @@ struct Args {
     #[clap(long, env)]
     ngrok_edge: Option<String>,
 
+    /// The path to the tokenizer config file. This path is used to load the tokenizer configuration which may
+    /// include a `chat_template`. If not provided, the default config will be used from the model hub.
+    #[clap(long, env)]
+    tokenizer_config_path: Option<String>,
+
+    /// Disable outlines grammar constrained generation.
+    /// This is a feature that allows you to generate text that follows a specific grammar.
+    #[clap(long, env)]
+    disable_grammar_support: bool,
+
     /// Display a lot of information about your runtime environment
     #[clap(long, short, action)]
     env: bool,
+
+    /// Control the maximum number of inputs that a client can send in a single request
+    #[clap(default_value = "4", long, env)]
+    max_client_batch_size: usize,
+
+    /// Lora Adapters a list of adapter ids i.e. `repo/adapter1,repo/adapter2` to load during
+    /// startup that will be available to callers via the `adapter_id` field in a request.
+    #[clap(long, env)]
+    lora_adapters: Option<String>,
+
+    /// Control if anonymous usage stats are collected.
+    /// Options are "on", "off" and "no-stack"
+    /// Defaul is on.
+    #[clap(default_value = "on", long, env)]
+    usage_stats: UsageStatsLevel,
+
+    /// Payload size limit in bytes
+    ///
+    /// Default is 2MB
+    #[clap(default_value = "2000000", long, env)]
+    payload_limit: usize,
+
+    /// Enables prefill logprobs
+    ///
+    /// Logprobs in the prompt are deactivated by default because they consume
+    /// a large amount of VRAM (especially for long prompts).
+    /// Using this flag reallows users to ask for them.
+    #[clap(long, env)]
+    enable_prefill_logprobs: bool,
 }
 
 #[derive(Debug)]
@@ -341,7 +888,9 @@ fn shard_manager(
     model_id: String,
     revision: Option<String>,
     quantize: Option<Quantization>,
+    speculate: Option<usize>,
     dtype: Option<Dtype>,
+    kv_cache_dtype: Option<KVCacheDtype>,
     trust_remote_code: bool,
     uds_path: String,
     rank: usize,
@@ -353,10 +902,18 @@ fn shard_manager(
     disable_custom_kernels: bool,
     watermark_gamma: Option<f32>,
     watermark_delta: Option<f32>,
+    cuda_graphs: Vec<usize>,
     cuda_memory_fraction: f32,
     rope_scaling: Option<RopeScaling>,
     rope_factor: Option<f32>,
+    max_total_tokens: Option<usize>,
+    max_batch_size: Option<usize>,
+    max_input_tokens: Option<usize>,
+    lora_adapters: Option<String>,
+    enable_prefill_logprobs: bool,
     otlp_endpoint: Option<String>,
+    otlp_service_name: String,
+    log_level: LevelFilter,
     status_sender: mpsc::Sender<ShardStatus>,
     shutdown: Arc<AtomicBool>,
     _shutdown_sender: mpsc::Sender<()>,
@@ -379,7 +936,7 @@ fn shard_manager(
         "--uds-path".to_string(),
         uds_path,
         "--logger-level".to_string(),
-        "INFO".to_string(),
+        log_level.to_string().to_uppercase(),
         "--json-output".to_string(),
     ];
 
@@ -398,9 +955,19 @@ fn shard_manager(
         shard_args.push(quantize.to_string())
     }
 
+    if let Some(speculate) = speculate {
+        shard_args.push("--speculate".to_string());
+        shard_args.push(speculate.to_string())
+    }
+
     if let Some(dtype) = dtype {
         shard_args.push("--dtype".to_string());
         shard_args.push(dtype.to_string())
+    }
+
+    if let Some(kv_cache_dtype) = kv_cache_dtype {
+        shard_args.push("--kv-cache-dtype".to_string());
+        shard_args.push(kv_cache_dtype.to_string())
     }
 
     // Model optional revision
@@ -415,21 +982,35 @@ fn shard_manager(
         (Some(scaling), Some(factor)) => Some((scaling, factor)),
         (None, Some(factor)) => Some((RopeScaling::Linear, factor)),
     };
-    // OpenTelemetry
+
+    // OpenTelemetry Endpoint
     if let Some(otlp_endpoint) = otlp_endpoint {
         shard_args.push("--otlp-endpoint".to_string());
         shard_args.push(otlp_endpoint);
     }
 
+    // OpenTelemetry Service Name
+    shard_args.push("--otlp-service-name".to_string());
+    shard_args.push(otlp_service_name);
+
+    // In case we use sliding window, we may ignore the sliding in flash for some backends depending on the parameter.
+    if let Some(max_input_tokens) = max_input_tokens {
+        shard_args.push("--max-input-tokens".to_string());
+        shard_args.push(max_input_tokens.to_string());
+    }
+
     // Copy current process env
     let mut envs: Vec<(OsString, OsString)> = env::vars_os().collect();
+
+    // Remove LOG_LEVEL if present
+    envs.retain(|(name, _)| name != "LOG_LEVEL");
 
     // Torch Distributed Env vars
     envs.push(("RANK".into(), rank.to_string().into()));
     envs.push(("WORLD_SIZE".into(), world_size.to_string().into()));
     envs.push(("MASTER_ADDR".into(), master_addr.into()));
     envs.push(("MASTER_PORT".into(), master_port.to_string().into()));
-    envs.push(("NCCL_ASYNC_ERROR_HANDLING".into(), "1".into()));
+    envs.push(("TORCH_NCCL_AVOID_RECORD_STREAMS".into(), "1".into()));
 
     // CUDA memory fraction
     envs.push((
@@ -440,6 +1021,9 @@ fn shard_manager(
     // Safetensors load fast
     envs.push(("SAFETENSORS_FAST_GPU".into(), "1".into()));
 
+    // Disable progress bar
+    envs.push(("HF_HUB_DISABLE_PROGRESS_BARS".into(), "1".into()));
+
     // Enable hf transfer for insane download speeds
     let enable_hf_transfer = env::var("HF_HUB_ENABLE_HF_TRANSFER").unwrap_or("1".to_string());
     envs.push((
@@ -449,7 +1033,7 @@ fn shard_manager(
 
     // Parse Inference API token
     if let Ok(api_token) = env::var("HF_API_TOKEN") {
-        envs.push(("HUGGING_FACE_HUB_TOKEN".into(), api_token.into()))
+        envs.push(("HF_TOKEN".into(), api_token.into()))
     };
 
     // Detect rope scaling
@@ -459,6 +1043,26 @@ fn shard_manager(
     if let Some((scaling, factor)) = rope {
         envs.push(("ROPE_SCALING".into(), scaling.to_string().into()));
         envs.push(("ROPE_FACTOR".into(), factor.to_string().into()));
+    }
+
+    if let Some(max_total_tokens) = max_total_tokens {
+        envs.push((
+            "MAX_TOTAL_TOKENS".into(),
+            max_total_tokens.to_string().into(),
+        ));
+    }
+    if let Some(max_batch_size) = max_batch_size {
+        envs.push(("MAX_BATCH_SIZE".into(), max_batch_size.to_string().into()));
+    }
+
+    // Lora Adapters
+    if let Some(lora_adapters) = lora_adapters {
+        envs.push(("LORA_ADAPTERS".into(), lora_adapters.into()));
+    }
+
+    // Logprobs
+    if enable_prefill_logprobs {
+        envs.push(("REQUEST_LOGPROBS".into(), "1".into()));
     }
 
     // If huggingface_hub_cache is some, pass it to the shard
@@ -475,6 +1079,19 @@ fn shard_manager(
             weights_cache_override.into(),
         ));
     };
+
+    // Enable experimental support for cuda graphs
+    if !cuda_graphs.is_empty() {
+        envs.push((
+            "CUDA_GRAPHS".into(),
+            cuda_graphs
+                .into_iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+                .into(),
+        ));
+    }
 
     // If disable_custom_kernels is true, pass it to the shard as an env var
     if disable_custom_kernels {
@@ -495,7 +1112,9 @@ fn shard_manager(
     tracing::info!("Starting shard");
     let mut p = match Command::new("text-generation-server")
         .args(shard_args)
+        .env_clear()
         .envs(envs)
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0)
@@ -517,13 +1136,35 @@ fn shard_manager(
     };
 
     // Redirect STDOUT to the console
+    let mut pstdin = p.stdin.take().unwrap();
     let shard_stdout_reader = BufReader::new(p.stdout.take().unwrap());
     let shard_stderr_reader = BufReader::new(p.stderr.take().unwrap());
 
     //stdout tracing thread
     thread::spawn(move || {
-        log_lines(shard_stdout_reader.lines());
+        log_lines(shard_stdout_reader);
     });
+    // We read stderr in another thread as it seems that lines() can block in some cases
+    let (err_sender, err_receiver) = mpsc::channel();
+    thread::spawn(move || {
+        for line in shard_stderr_reader.lines().map_while(Result::ok) {
+            err_sender.send(line).unwrap_or(());
+        }
+    });
+    // We read stdin in another thread as it seems that lines() can block in some cases
+    if LevelFilter::current() >= tracing::Level::DEBUG {
+        thread::spawn(move || {
+            let mut stdin = io::stdin(); // We get `Stdin` here.
+            loop {
+                let mut buffer = vec![0; 4096];
+                if let Ok(n) = stdin.read(&mut buffer) {
+                    if n > 0 {
+                        let _ = pstdin.write_all(&buffer[..n]);
+                    }
+                }
+            }
+        });
+    }
 
     let mut ready = false;
     let start_time = Instant::now();
@@ -531,13 +1172,6 @@ fn shard_manager(
     loop {
         // Process exited
         if let Some(exit_status) = p.try_wait().unwrap() {
-            // We read stderr in another thread as it seems that lines() can block in some cases
-            let (err_sender, err_receiver) = mpsc::channel();
-            thread::spawn(move || {
-                for line in shard_stderr_reader.lines().flatten() {
-                    err_sender.send(line).unwrap_or(());
-                }
-            });
             let mut err = String::new();
             while let Ok(line) = err_receiver.recv_timeout(Duration::from_millis(10)) {
                 err = err + "\n" + &line;
@@ -555,9 +1189,7 @@ fn shard_manager(
 
         // We received a shutdown signal
         if shutdown.load(Ordering::SeqCst) {
-            p.kill().unwrap();
-            let _ = p.wait();
-            tracing::info!("Shard terminated");
+            terminate("shard", p, Duration::from_secs(90)).unwrap();
             return;
         }
 
@@ -588,7 +1220,10 @@ fn shutdown_shards(shutdown: Arc<AtomicBool>, shutdown_receiver: &mpsc::Receiver
 fn num_cuda_devices() -> Option<usize> {
     let devices = match env::var("CUDA_VISIBLE_DEVICES") {
         Ok(devices) => devices,
-        Err(_) => env::var("NVIDIA_VISIBLE_DEVICES").ok()?,
+        Err(_) => match env::var("NVIDIA_VISIBLE_DEVICES") {
+            Ok(devices) => devices,
+            Err(_) => env::var("ZE_AFFINITY_MASK").ok()?,
+        },
     };
     let n_devices = devices.split(',').count();
     Some(n_devices)
@@ -625,30 +1260,51 @@ struct PythonLogMessage {
 impl PythonLogMessage {
     fn trace(&self) {
         match self.record.level.name {
-            PythonLogLevelEnum::Trace => tracing::trace!("{}", self.text),
-            PythonLogLevelEnum::Debug => tracing::debug!("{}", self.text),
-            PythonLogLevelEnum::Info => tracing::info!("{}", self.text),
-            PythonLogLevelEnum::Success => tracing::info!("{}", self.text),
-            PythonLogLevelEnum::Warning => tracing::warn!("{}", self.text),
-            PythonLogLevelEnum::Error => tracing::error!("{}", self.text),
-            PythonLogLevelEnum::Critical => tracing::error!("{}", self.text),
+            PythonLogLevelEnum::Trace => tracing::trace!("{}", self.text.trim_end()),
+            PythonLogLevelEnum::Debug => tracing::debug!("{}", self.text.trim_end()),
+            PythonLogLevelEnum::Info => tracing::info!("{}", self.text.trim_end()),
+            PythonLogLevelEnum::Success => tracing::info!("{}", self.text.trim_end()),
+            PythonLogLevelEnum::Warning => tracing::warn!("{}", self.text.trim_end()),
+            PythonLogLevelEnum::Error => tracing::error!("{}", self.text.trim_end()),
+            PythonLogLevelEnum::Critical => tracing::error!("{}", self.text.trim_end()),
         }
     }
 }
 
-impl TryFrom<&String> for PythonLogMessage {
+impl TryFrom<&[u8]> for PythonLogMessage {
     type Error = serde_json::Error;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
-        serde_json::from_str::<Self>(value)
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        serde_json::from_slice::<Self>(value)
     }
 }
 
-fn log_lines<S: Sized + BufRead>(lines: Lines<S>) {
-    for line in lines.flatten() {
-        match PythonLogMessage::try_from(&line) {
-            Ok(log) => log.trace(),
-            Err(_) => tracing::debug!("{line}"),
+fn log_lines<R: Sized + Read>(mut bufread: BufReader<R>) {
+    let mut buffer = vec![0u8; 8 * 4096];
+    let mut stdout = std::io::stdout();
+    loop {
+        let n = bufread.read(&mut buffer);
+        if let Ok(n) = n {
+            if n > 0 {
+                let mut lines = buffer[..n].split(|i| *i == b'\n').peekable();
+                while let Some(line) = lines.next() {
+                    match PythonLogMessage::try_from(line) {
+                        Ok(log) => log.trace(),
+                        // For interactive debugging ?
+                        Err(_) => {
+                            if LevelFilter::current() >= tracing::Level::DEBUG {
+                                stdout.write_all(line).unwrap();
+                                if lines.peek().is_some() {
+                                    stdout.write_all(b"\n").unwrap();
+                                }
+                                stdout.flush().unwrap();
+                            }
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
         }
     }
 }
@@ -661,9 +1317,9 @@ fn find_num_shards(
     let num_shard = match (sharded, num_shard) {
         (Some(true), None) => {
             // try to default to the number of available GPUs
-            tracing::info!("Parsing num_shard from CUDA_VISIBLE_DEVICES/NVIDIA_VISIBLE_DEVICES");
+            tracing::info!("Parsing num_shard from CUDA_VISIBLE_DEVICES/NVIDIA_VISIBLE_DEVICES/ZE_AFFINITY_MASK");
             let n_devices = num_cuda_devices()
-                .expect("--num-shard and CUDA_VISIBLE_DEVICES/NVIDIA_VISIBLE_DEVICES are not set");
+                .expect("--num-shard and CUDA_VISIBLE_DEVICES/NVIDIA_VISIBLE_DEVICES/ZE_AFFINITY_MASK are not set");
             if n_devices <= 1 {
                 return Err(LauncherError::NotEnoughCUDADevices(format!(
                     "`sharded` is true but only found {n_devices} CUDA devices"
@@ -693,25 +1349,41 @@ fn find_num_shards(
     Ok(num_shard)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum LauncherError {
+    #[error("Invalid argument: {0}")]
     ArgumentValidation(String),
+    #[error("not enough cuda devices: {0}")]
     NotEnoughCUDADevices(String),
+    #[error("Download error")]
     DownloadError,
+    #[error("Shard cannot start")]
     ShardCannotStart,
+    #[error("Shard disconnected")]
     ShardDisconnected,
+    #[error("Shard failed")]
     ShardFailed,
+    #[error("Webserver failed")]
     WebserverFailed,
+    #[error("Webserver cannot start")]
     WebserverCannotStart,
 }
 
-fn download_convert_model(args: &Args, running: Arc<AtomicBool>) -> Result<(), LauncherError> {
+fn download_convert_model(
+    model_id: &str,
+    revision: Option<&str>,
+    trust_remote_code: bool,
+    huggingface_hub_cache: Option<&str>,
+    weights_cache_override: Option<&str>,
+    running: Arc<AtomicBool>,
+    merge_lora: bool,
+) -> Result<(), LauncherError> {
     // Enter download tracing span
     let _span = tracing::span!(tracing::Level::INFO, "download").entered();
 
     let mut download_args = vec![
         "download-weights".to_string(),
-        args.model_id.to_string(),
+        model_id.to_string(),
         "--extension".to_string(),
         ".safetensors".to_string(),
         "--logger-level".to_string(),
@@ -719,23 +1391,33 @@ fn download_convert_model(args: &Args, running: Arc<AtomicBool>) -> Result<(), L
         "--json-output".to_string(),
     ];
 
+    if merge_lora {
+        download_args.push("--merge-lora".to_string());
+    }
+
     // Model optional revision
-    if let Some(revision) = &args.revision {
+    if let Some(revision) = &revision {
         download_args.push("--revision".to_string());
         download_args.push(revision.to_string())
     }
 
     // Trust remote code for automatic peft fusion
-    if args.trust_remote_code {
+    if trust_remote_code {
         download_args.push("--trust-remote-code".to_string());
     }
 
     // Copy current process env
     let mut envs: Vec<(OsString, OsString)> = env::vars_os().collect();
 
+    // Remove LOG_LEVEL if present
+    envs.retain(|(name, _)| name != "LOG_LEVEL");
+
+    // Disable progress bar
+    envs.push(("HF_HUB_DISABLE_PROGRESS_BARS".into(), "1".into()));
+
     // If huggingface_hub_cache is set, pass it to the download process
     // Useful when running inside a docker container
-    if let Some(ref huggingface_hub_cache) = args.huggingface_hub_cache {
+    if let Some(ref huggingface_hub_cache) = huggingface_hub_cache {
         envs.push(("HUGGINGFACE_HUB_CACHE".into(), huggingface_hub_cache.into()));
     };
 
@@ -748,12 +1430,12 @@ fn download_convert_model(args: &Args, running: Arc<AtomicBool>) -> Result<(), L
 
     // Parse Inference API token
     if let Ok(api_token) = env::var("HF_API_TOKEN") {
-        envs.push(("HUGGING_FACE_HUB_TOKEN".into(), api_token.into()))
+        envs.push(("HF_TOKEN".into(), api_token.into()))
     };
 
     // If args.weights_cache_override is some, pass it to the download process
     // Useful when running inside a HuggingFace Inference Endpoint
-    if let Some(weights_cache_override) = &args.weights_cache_override {
+    if let Some(weights_cache_override) = &weights_cache_override {
         envs.push((
             "WEIGHTS_CACHE_OVERRIDE".into(),
             weights_cache_override.into(),
@@ -761,9 +1443,10 @@ fn download_convert_model(args: &Args, running: Arc<AtomicBool>) -> Result<(), L
     };
 
     // Start process
-    tracing::info!("Starting download process.");
+    tracing::info!("Starting check and download process for {model_id}");
     let mut download_process = match Command::new("text-generation-server")
         .args(download_args)
+        .env_clear()
         .envs(envs)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -783,28 +1466,34 @@ fn download_convert_model(args: &Args, running: Arc<AtomicBool>) -> Result<(), L
         }
     };
 
-    // Redirect STDOUT to the console
-    let download_stdout = download_process.stdout.take().unwrap();
-    let stdout = BufReader::new(download_stdout);
+    let download_stdout = BufReader::new(download_process.stdout.take().unwrap());
 
     thread::spawn(move || {
-        log_lines(stdout.lines());
+        log_lines(download_stdout);
+    });
+
+    let download_stderr = BufReader::new(download_process.stderr.take().unwrap());
+
+    // We read stderr in another thread as it seems that lines() can block in some cases
+    let (err_sender, err_receiver) = mpsc::channel();
+    thread::spawn(move || {
+        for line in download_stderr.lines().map_while(Result::ok) {
+            err_sender.send(line).unwrap_or(());
+        }
     });
 
     loop {
         if let Some(status) = download_process.try_wait().unwrap() {
             if status.success() {
-                tracing::info!("Successfully downloaded weights.");
+                tracing::info!("Successfully downloaded weights for {model_id}");
                 break;
             }
 
             let mut err = String::new();
-            download_process
-                .stderr
-                .take()
-                .unwrap()
-                .read_to_string(&mut err)
-                .unwrap();
+            while let Ok(line) = err_receiver.recv_timeout(Duration::from_millis(10)) {
+                err = err + "\n" + &line;
+            }
+
             if let Some(signal) = status.signal() {
                 tracing::error!(
                     "Download process was signaled to shutdown with signal {signal}: {err}"
@@ -828,6 +1517,11 @@ fn download_convert_model(args: &Args, running: Arc<AtomicBool>) -> Result<(), L
 fn spawn_shards(
     num_shard: usize,
     args: &Args,
+    cuda_graphs: Vec<usize>,
+    max_total_tokens: Option<usize>,
+    max_input_tokens: Option<usize>,
+    quantize: Option<Quantization>,
+    max_log_level: LevelFilter,
     shutdown: Arc<AtomicBool>,
     shutdown_receiver: &mpsc::Receiver<()>,
     shutdown_sender: mpsc::Sender<()>,
@@ -847,22 +1541,30 @@ fn spawn_shards(
         let shutdown = shutdown.clone();
         let shutdown_sender = shutdown_sender.clone();
         let otlp_endpoint = args.otlp_endpoint.clone();
-        let quantize = args.quantize;
+        let otlp_service_name = args.otlp_service_name.clone();
+        let speculate = args.speculate;
         let dtype = args.dtype;
+        let kv_cache_dtype = args.kv_cache_dtype;
         let trust_remote_code = args.trust_remote_code;
         let master_port = args.master_port;
         let disable_custom_kernels = args.disable_custom_kernels;
         let watermark_gamma = args.watermark_gamma;
         let watermark_delta = args.watermark_delta;
+        let cuda_graphs_clone = cuda_graphs.clone();
         let cuda_memory_fraction = args.cuda_memory_fraction;
         let rope_scaling = args.rope_scaling;
         let rope_factor = args.rope_factor;
+        let max_batch_size = args.max_batch_size;
+        let lora_adapters = args.lora_adapters.clone();
+        let enable_prefill_logprobs = args.enable_prefill_logprobs;
         thread::spawn(move || {
             shard_manager(
                 model_id,
                 revision,
                 quantize,
+                speculate,
                 dtype,
+                kv_cache_dtype,
                 trust_remote_code,
                 uds_path,
                 rank,
@@ -874,10 +1576,18 @@ fn spawn_shards(
                 disable_custom_kernels,
                 watermark_gamma,
                 watermark_delta,
+                cuda_graphs_clone,
                 cuda_memory_fraction,
                 rope_scaling,
                 rope_factor,
+                max_total_tokens,
+                max_batch_size,
+                max_input_tokens,
+                lora_adapters,
+                enable_prefill_logprobs,
                 otlp_endpoint,
+                otlp_service_name,
+                max_log_level,
                 status_sender,
                 shutdown,
                 shutdown_sender,
@@ -914,8 +1624,152 @@ fn spawn_shards(
     Ok(())
 }
 
+#[derive(Debug)]
+enum Gpu {
+    RTX4090,
+    T4,
+    L4,
+    L40,
+    L40S,
+    A10G,
+    A40,
+    H100,
+    A100,
+    H200,
+    Unknown(String),
+}
+
+#[derive(Debug)]
+struct ComputeType {
+    count: usize,
+    card: Gpu,
+}
+
+impl From<&str> for Gpu {
+    fn from(value: &str) -> Self {
+        match value {
+            "nvidia-4090" => Gpu::RTX4090,
+            "nvidia-t4" => Gpu::T4,
+            "nvidia-l4" => Gpu::L4,
+            "nvidia-l40" => Gpu::L40,
+            "nvidia-l40s" => Gpu::L40S,
+            "nvidia-a10g" => Gpu::A10G,
+            "nvidia-a40" => Gpu::A40,
+            "nvidia-h100-80gb-hbm3" => Gpu::H100,
+            "nvidia-h100-nvl" => Gpu::H100,
+            "nvidia-h100" => Gpu::H100,
+            "nvidia-a100-sxm4-80gb" => Gpu::A100,
+            "nvidia-a100-sxm4-40gb" => Gpu::A100,
+            "nvidia-a100-80gb-pcie" => Gpu::A100,
+            "nvidia-a100" => Gpu::A100,
+            "nvidia-h200" => Gpu::H200,
+            card => Gpu::Unknown(card.to_string()),
+        }
+    }
+}
+
+impl std::fmt::Display for Gpu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Gpu::RTX4090 => write!(f, "nvida-4090"),
+            Gpu::T4 => write!(f, "nvida-t4"),
+            Gpu::L4 => write!(f, "nvida-l4"),
+            Gpu::L40 => write!(f, "nvida-l40"),
+            Gpu::L40S => write!(f, "nvida-l40s"),
+            Gpu::A10G => write!(f, "nvidia-a10g"),
+            Gpu::A40 => write!(f, "nvidia-a40"),
+            Gpu::H100 => write!(f, "nvidia-h100-80fb-hbm3"),
+            Gpu::A100 => write!(f, "nvida-a100-sxm4-80gb"),
+            Gpu::H200 => write!(f, "nvida-h200"),
+            Gpu::Unknown(card) => write!(f, "{}", card),
+        }
+    }
+}
+
+impl ComputeType {
+    fn f16_flop(&self) -> Option<u64> {
+        let card_flop = match &self.card {
+            // https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4090/
+            // Specs are unclear https://www.itcreations.com/nvidia-gpu/nvidia-geforce-rtx-4090-gpu
+            Gpu::RTX4090 => Some(82 * 10u64.pow(12)),
+            // https://www.nvidia.com/en-us/data-center/tesla-t4/
+            Gpu::T4 => Some(65 * 10u64.pow(12)),
+            // https://www.nvidia.com/en-us/data-center/l4/
+            Gpu::L4 => Some(121 * 10u64.pow(12)),
+            // https://www.nvidia.com/en-us/data-center/l40/
+            Gpu::L40 => Some(181 * 10u64.pow(12)),
+            // https://www.nvidia.com/en-us/data-center/l40s/
+            Gpu::L40S => Some(363 * 10u64.pow(12)),
+            // https://www.nvidia.com/en-us/data-center/products/a10-gpu/
+            Gpu::A10G => Some(125 * 10u64.pow(12)),
+            // https://www.nvidia.com/en-us/data-center/a40/
+            // https://images.nvidia.com/content/Solutions/data-center/a40/nvidia-a40-datasheet.pdf
+            Gpu::A40 => Some(149 * 10u64.pow(12)),
+            // https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/nvidia-a100-datasheet-us-nvidia-1758950-r4-web.pdf
+            Gpu::A100 => Some(312 * 10u64.pow(12)),
+            // https://www.nvidia.com/en-us/data-center/h100/
+            // https://www.techpowerup.com/gpu-specs/docs/nvidia-gh100-architecture.pdf
+            Gpu::H100 => Some(900 * 10u64.pow(12)),
+            // https://www.nvidia.com/en-us/data-center/h200/
+            Gpu::H200 => Some(989 * 10u64.pow(12)),
+            Gpu::Unknown(card) => {
+                tracing::warn!("Unkown compute for card {card}");
+                None
+            }
+        };
+        card_flop.map(|f| f * self.count as u64)
+    }
+
+    fn vram(&self, memory_fraction: f32) -> Option<usize> {
+        let output = Command::new("nvidia-smi")
+            .args(["--query-gpu=memory.total", "--format=csv"])
+            .output()
+            .ok()?;
+        let output = String::from_utf8(output.stdout).ok()?;
+        let fullname = output.split('\n').nth(1)?;
+        let mut tokens = fullname.split(' ');
+        let amount = tokens.next()?;
+        let unit = tokens.next()?;
+        if unit != "MiB" {
+            tracing::warn!("Unexpected memory unit {unit}, expected MiB");
+            return None;
+        }
+        let amount: usize = amount.parse().ok()?;
+        let amount = amount * 2usize.pow(20);
+        let wiggle_room: f32 = env::var("TGI_WIGGLE_ROOM")
+            .ok()
+            .and_then(|wiggle| wiggle.parse().ok())
+            .unwrap_or(0.95);
+        let total = amount * self.count;
+        let adjusted = ((total as f32) * memory_fraction * wiggle_room) as usize;
+        Some(adjusted)
+    }
+}
+
+impl From<ComputeType> for OsString {
+    fn from(value: ComputeType) -> Self {
+        format!("{}-{}", value.count, value.card).into()
+    }
+}
+
+fn compute_type(count: usize) -> Option<ComputeType> {
+    let output = Command::new("nvidia-smi")
+        .args(["--query-gpu=gpu_name", "--format=csv"])
+        .output()
+        .ok()?;
+    let output = String::from_utf8(output.stdout).ok()?;
+    let fullname = output.split('\n').nth(1)?;
+    let cardname = fullname.replace(' ', "-").to_lowercase();
+    let card = (&*cardname).into();
+    Some(ComputeType { count, card })
+}
+
 fn spawn_webserver(
+    num_shard: usize,
     args: Args,
+    max_input_tokens: Option<usize>,
+    max_total_tokens: Option<usize>,
+    max_batch_prefill_tokens: u32,
     shutdown: Arc<AtomicBool>,
     shutdown_receiver: &mpsc::Receiver<()>,
 ) -> Result<Child, LauncherError> {
@@ -923,18 +1777,18 @@ fn spawn_webserver(
     // Start webserver
     tracing::info!("Starting Webserver");
     let mut router_args = vec![
+        "--max-client-batch-size".to_string(),
+        args.max_client_batch_size.to_string(),
         "--max-concurrent-requests".to_string(),
         args.max_concurrent_requests.to_string(),
         "--max-best-of".to_string(),
         args.max_best_of.to_string(),
         "--max-stop-sequences".to_string(),
         args.max_stop_sequences.to_string(),
-        "--max-input-length".to_string(),
-        args.max_input_length.to_string(),
-        "--max-total-tokens".to_string(),
-        args.max_total_tokens.to_string(),
+        "--max-top-n-tokens".to_string(),
+        args.max_top_n_tokens.to_string(),
         "--max-batch-prefill-tokens".to_string(),
-        args.max_batch_prefill_tokens.to_string(),
+        max_batch_prefill_tokens.to_string(),
         "--waiting-served-ratio".to_string(),
         args.waiting_served_ratio.to_string(),
         "--max-waiting-tokens".to_string(),
@@ -949,7 +1803,36 @@ fn spawn_webserver(
         format!("{}-0", args.shard_uds_path),
         "--tokenizer-name".to_string(),
         args.model_id,
+        "--payload-limit".to_string(),
+        args.payload_limit.to_string(),
     ];
+    if let Some(max_input_tokens) = max_input_tokens {
+        router_args.extend_from_slice(&[
+            "--max-input-tokens".to_string(),
+            max_input_tokens.to_string(),
+        ]);
+    }
+    if let Some(max_total_tokens) = max_total_tokens {
+        router_args.extend_from_slice(&[
+            "--max-total-tokens".to_string(),
+            max_total_tokens.to_string(),
+        ]);
+    }
+
+    // Pass usage stats flags to router
+    router_args.push("--usage-stats".to_string());
+    router_args.push(args.usage_stats.to_string());
+
+    // Grammar support
+    if args.disable_grammar_support {
+        router_args.push("--disable-grammar-support".to_string());
+    }
+
+    // Tokenizer config path
+    if let Some(ref tokenizer_config_path) = args.tokenizer_config_path {
+        router_args.push("--tokenizer-config-path".to_string());
+        router_args.push(tokenizer_config_path.to_string());
+    }
 
     // Model optional max batch total tokens
     if let Some(max_batch_total_tokens) = args.max_batch_total_tokens {
@@ -957,10 +1840,20 @@ fn spawn_webserver(
         router_args.push(max_batch_total_tokens.to_string());
     }
 
+    // Router optional max batch size
+    if let Some(max_batch_size) = args.max_batch_size {
+        router_args.push("--max-batch-size".to_string());
+        router_args.push(max_batch_size.to_string());
+    }
+
     // Model optional revision
     if let Some(ref revision) = args.revision {
         router_args.push("--revision".to_string());
         router_args.push(revision.to_string())
+    }
+
+    if args.trust_remote_code {
+        router_args.push("--trust-remote-code".to_string());
     }
 
     if args.json_output {
@@ -973,12 +1866,22 @@ fn spawn_webserver(
         router_args.push(otlp_endpoint);
     }
 
+    // OpenTelemetry
+    let otlp_service_name = args.otlp_service_name;
+    router_args.push("--otlp-service-name".to_string());
+    router_args.push(otlp_service_name);
+
     // CORS origins
     for origin in args.cors_allow_origin.into_iter() {
         router_args.push("--cors-allow-origin".to_string());
         router_args.push(origin);
     }
 
+    // API Key
+    if let Some(api_key) = args.api_key {
+        router_args.push("--api-key".to_string());
+        router_args.push(api_key);
+    }
     // Ngrok
     if args.ngrok {
         router_args.push("--ngrok".to_string());
@@ -993,8 +1896,15 @@ fn spawn_webserver(
 
     // Parse Inference API token
     if let Ok(api_token) = env::var("HF_API_TOKEN") {
-        envs.push(("HUGGING_FACE_HUB_TOKEN".into(), api_token.into()))
+        envs.push(("HF_TOKEN".into(), api_token.into()))
     };
+
+    // Parse Compute type
+    if let Ok(compute_type) = env::var("COMPUTE_TYPE") {
+        envs.push(("COMPUTE_TYPE".into(), compute_type.into()))
+    } else if let Some(compute_type) = compute_type(num_shard) {
+        envs.push(("COMPUTE_TYPE".into(), compute_type.into()))
+    }
 
     let mut webserver = match Command::new("text-generation-router")
         .args(router_args)
@@ -1043,7 +1953,6 @@ fn terminate(process_name: &str, mut process: Child, timeout: Duration) -> io::R
     signal::kill(Pid::from_raw(process.id() as i32), Signal::SIGTERM).unwrap();
 
     tracing::info!("Waiting for {process_name} to gracefully shutdown");
-
     while terminate_time.elapsed() < timeout {
         if let Some(status) = process.try_wait()? {
             tracing::info!("{process_name} terminated");
@@ -1051,7 +1960,6 @@ fn terminate(process_name: &str, mut process: Child, timeout: Duration) -> io::R
         }
         sleep(Duration::from_millis(100));
     }
-
     tracing::info!("Killing {process_name}");
 
     process.kill()?;
@@ -1066,8 +1974,22 @@ fn main() -> Result<(), LauncherError> {
     let args: Args = Args::parse();
 
     // Filter events with LOG_LEVEL
-    let env_filter =
-        EnvFilter::try_from_env("LOG_LEVEL").unwrap_or_else(|_| EnvFilter::new("info"));
+    let varname = "LOG_LEVEL";
+    let env_filter = if let Ok(log_level) = std::env::var(varname) {
+        // Override to avoid simple logs to be spammed with tokio level informations
+        let log_level = match &log_level[..] {
+            "warn" => "text_generation_launcher=warn,text_generation_router=warn",
+            "info" => "text_generation_launcher=info,text_generation_router=info",
+            "debug" => "text_generation_launcher=debug,text_generation_router=debug",
+            log_level => log_level,
+        };
+        EnvFilter::builder()
+            .with_default_directive(LevelFilter::INFO.into())
+            .parse_lossy(log_level)
+    } else {
+        EnvFilter::new("info")
+    };
+    let max_log_level = env_filter.max_level_hint().unwrap_or(LevelFilter::INFO);
 
     if args.json_output {
         tracing_subscriber::fmt()
@@ -1086,20 +2008,112 @@ fn main() -> Result<(), LauncherError> {
         tracing::info!("{}", env_runtime);
     }
 
-    tracing::info!("{:?}", args);
+    tracing::info!("{:#?}", args);
+
+    let config: Option<Config> = get_config(&args.model_id, &args.revision).ok();
+    let quantize = config.as_ref().and_then(|c| c.quantize);
+    // Quantization usually means you're even more RAM constrained.
+
+    let (prefix_caching, attention) = resolve_attention(&config, &args.lora_adapters);
+    tracing::info!("Using attention {attention} - Prefix caching {prefix_caching}");
+    std::env::set_var("PREFIX_CACHING", prefix_caching);
+    std::env::set_var("ATTENTION", attention);
+
+    let num_shard = find_num_shards(args.sharded, args.num_shard)?;
+    if num_shard > 1 {
+        if matches!(args.quantize, Some(Quantization::Exl2)) {
+            return Err(LauncherError::ArgumentValidation(
+                "Sharding is currently not supported with `exl2` quantization".into(),
+            ));
+        }
+        tracing::info!("Sharding model on {num_shard} processes");
+    }
+
+    let max_input_tokens = {
+        match (args.max_input_tokens, args.max_input_length) {
+            (Some(max_input_tokens), Some(max_input_length)) => {
+                return Err(LauncherError::ArgumentValidation(
+                    format!("Both `max_input_tokens` ({max_input_tokens}) and `max_input_length` ({max_input_length}) are set. Please define only `max_input_tokens` as `max_input_length is deprecated for naming consistency.",
+                )));
+            }
+            (Some(max_input_tokens), None) | (None, Some(max_input_tokens)) => {
+                Some(max_input_tokens)
+            }
+            (None, None) => None,
+        }
+    };
+    let max_total_tokens = args.max_total_tokens;
+    let max_batch_prefill_tokens = {
+        match args.max_batch_prefill_tokens {
+            Some(max_batch_prefill_tokens) => max_batch_prefill_tokens,
+            None => {
+                let compute_type = compute_type(num_shard);
+                let compute_optimal = compute_optimal(config.as_ref(), compute_type.as_ref());
+                // TODO: remove this when we correctly esimate the flops for VLMs
+                // this is a short term temporary fix to enable vlms to avoid rejecting images
+                let default_optimal = match config {
+                    Some(ref config) => match config.model_type.as_deref() {
+                        Some("qwen2_vl") => 10_000,
+                        _ => 4096,
+                    },
+                    None => 4096,
+                };
+                let default = compute_optimal.unwrap_or(default_optimal);
+                let vram_maximum = vram_maximum(
+                    config.as_ref(),
+                    compute_type.as_ref(),
+                    args.cuda_memory_fraction,
+                );
+                let max_position_embeddings = config.and_then(|c| c.max_position_embeddings);
+                let value = if let Some(max_position_embeddings) = max_position_embeddings {
+                    default.min(max_position_embeddings)
+                } else {
+                    default
+                };
+                let value = if let Some(vram_maximum) = vram_maximum {
+                    if vram_maximum < value {
+                        tracing::warn!("Reducing the max batch prefill from {default} to {vram_maximum} because there is not enough VRAM to support it.");
+                    }
+                    value.min(vram_maximum)
+                } else {
+                    value
+                };
+                tracing::info!("Default `max_batch_prefill_tokens` to {value}");
+                value as u32
+            }
+        }
+    };
 
     // Validate args
-    if args.max_input_length >= args.max_total_tokens {
-        return Err(LauncherError::ArgumentValidation(
-            "`max_input_length` must be < `max_total_tokens`".to_string(),
-        ));
+    if let (Some(max_input_tokens), Some(max_total_tokens)) = (max_input_tokens, max_total_tokens) {
+        if max_input_tokens >= max_total_tokens {
+            return Err(LauncherError::ArgumentValidation(
+                    format!("`max_input_tokens`({max_input_tokens}) must be < `max_total_tokens`({max_total_tokens})"),
+                ));
+        }
     }
-    if args.max_input_length as u32 > args.max_batch_prefill_tokens {
-        return Err(LauncherError::ArgumentValidation(format!(
-            "`max_batch_prefill_tokens` must be >= `max_input_length`. Given: {} and {}",
-            args.max_batch_prefill_tokens, args.max_input_length
-        )));
+
+    if matches!(args.quantize, Some(Quantization::Bitsandbytes)) {
+        tracing::warn!("Bitsandbytes is deprecated, use `eetq` instead, which provides better latencies overall and is drop-in in most cases.");
     }
+    let quantize = args.quantize.or(quantize);
+    let cuda_graphs = match (&args.cuda_graphs, &quantize) {
+        (Some(cuda_graphs), _) => cuda_graphs.iter().cloned().filter(|&c| c > 0).collect(),
+        #[allow(deprecated)]
+        (None, Some(Quantization::Bitsandbytes)) => {
+            tracing::warn!("Bitsandbytes doesn't work with cuda graphs, deactivating them");
+            vec![]
+        }
+        (None, Some(Quantization::Exl2)) => {
+            tracing::warn!("Exl2 doesn't work with cuda graphs, deactivating them");
+            vec![]
+        }
+        _ => {
+            let cuda_graphs = vec![1, 2, 4, 8, 16, 32];
+            tracing::info!("Using default cuda graphs {cuda_graphs:?}");
+            cuda_graphs
+        }
+    };
 
     if args.validation_workers == 0 {
         return Err(LauncherError::ArgumentValidation(
@@ -1113,23 +2127,14 @@ fn main() -> Result<(), LauncherError> {
         );
     }
 
-    let num_shard = find_num_shards(args.sharded, args.num_shard)?;
-    if num_shard > 1 {
-        tracing::info!("Sharding model on {num_shard} processes");
-    }
-
     if let Some(ref max_batch_total_tokens) = args.max_batch_total_tokens {
-        if args.max_batch_prefill_tokens > *max_batch_total_tokens {
-            return Err(LauncherError::ArgumentValidation(format!(
-                "`max_batch_prefill_tokens` must be <= `max_batch_total_tokens`. Given: {} and {}",
-                args.max_batch_prefill_tokens, max_batch_total_tokens
-            )));
-        }
-        if args.max_total_tokens as u32 > *max_batch_total_tokens {
-            return Err(LauncherError::ArgumentValidation(format!(
-                "`max_total_tokens` must be <= `max_batch_total_tokens`. Given: {} and {}",
-                args.max_total_tokens, max_batch_total_tokens
-            )));
+        if let Some(max_total_tokens) = max_total_tokens {
+            if max_total_tokens as u32 > *max_batch_total_tokens {
+                return Err(LauncherError::ArgumentValidation(format!(
+                    "`max_total_tokens` must be <= `max_batch_total_tokens`. Given: {} and {}",
+                    max_total_tokens, max_batch_total_tokens
+                )));
+            }
         }
     }
 
@@ -1156,7 +2161,52 @@ fn main() -> Result<(), LauncherError> {
     .expect("Error setting Ctrl-C handler");
 
     // Download and convert model weights
-    download_convert_model(&args, running.clone())?;
+    download_convert_model(
+        &args.model_id,
+        args.revision.as_deref(),
+        args.trust_remote_code,
+        args.huggingface_hub_cache.as_deref(),
+        args.weights_cache_override.as_deref(),
+        running.clone(),
+        true, // if its only a lora model - we should merge the lora adapters
+    )?;
+
+    // Download and convert lora adapters if any
+    if let Some(lora_adapters) = &args.lora_adapters {
+        for adapter in lora_adapters.split(',') {
+            // skip download if a path is provided
+            if adapter.contains('=') {
+                continue;
+            }
+
+            let adapter = adapter.trim();
+
+            // check if adapter has more than 1 '@'
+            if adapter.matches('@').count() > 1 {
+                return Err(LauncherError::ArgumentValidation(format!(
+                    "Invalid LoRA adapter format: {}",
+                    adapter
+                )));
+            }
+
+            // capture adapter_id, path, revision in format of adapter_id=path@revision
+            // path is disabled beforehand.
+            let mut splits = adapter.split("@");
+            let adapter_id = splits.next().ok_or_else(|| {
+                LauncherError::ArgumentValidation("Missing adapter id".to_string())
+            })?;
+            let revision = splits.next();
+            download_convert_model(
+                adapter_id,
+                revision,
+                args.trust_remote_code,
+                args.huggingface_hub_cache.as_deref(),
+                args.weights_cache_override.as_deref(),
+                running.clone(),
+                false, // avoid merging lora adapters if using multi-lora
+            )?;
+        }
+    }
 
     if !running.load(Ordering::SeqCst) {
         // Launcher was asked to stop
@@ -1175,6 +2225,11 @@ fn main() -> Result<(), LauncherError> {
     spawn_shards(
         num_shard,
         &args,
+        cuda_graphs,
+        max_total_tokens,
+        max_input_tokens,
+        quantize,
+        max_log_level,
         shutdown.clone(),
         &shutdown_receiver,
         shutdown_sender,
@@ -1189,11 +2244,18 @@ fn main() -> Result<(), LauncherError> {
         return Ok(());
     }
 
-    let mut webserver =
-        spawn_webserver(args, shutdown.clone(), &shutdown_receiver).map_err(|err| {
-            shutdown_shards(shutdown.clone(), &shutdown_receiver);
-            err
-        })?;
+    let mut webserver = spawn_webserver(
+        num_shard,
+        args,
+        max_input_tokens,
+        max_total_tokens,
+        max_batch_prefill_tokens,
+        shutdown.clone(),
+        &shutdown_receiver,
+    )
+    .inspect_err(|_| {
+        shutdown_shards(shutdown.clone(), &shutdown_receiver);
+    })?;
 
     // Default exit code
     let mut exit_code = Ok(());

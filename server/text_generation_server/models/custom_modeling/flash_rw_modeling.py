@@ -1,29 +1,29 @@
+from typing import List, Optional, Tuple
+
 import torch
 import torch.distributed
-
 from torch import nn
-from transformers.modeling_utils import PreTrainedModel
 from transformers.configuration_utils import PretrainedConfig
-from typing import Optional, List, Tuple
-
-# vllm imports
-import vllm_cache_ops
-import vllm_attention_ops
-
-from text_generation_server.utils.flash_attn import attention
-from text_generation_server.utils.layers import (
-    TensorParallelRowLinear,
+from transformers.modeling_utils import PreTrainedModel
+from text_generation_server.layers import (
+    SpeculativeHead,
     TensorParallelColumnLinear,
     TensorParallelEmbedding,
-    TensorParallelHead,
-    FastLayerNorm,
-    PositionRotaryEmbedding,
+    TensorParallelRowLinear,
     get_linear,
+)
+from text_generation_server.layers.attention.kv_cache import get_kv_scales
+from text_generation_server.layers.layernorm import FastLayerNorm
+from text_generation_server.layers.rotary import PositionRotaryEmbedding
+from text_generation_server.layers.attention import (
+    attention,
+    paged_attention,
+    Seqlen,
 )
 
 
 def load_row(config, prefix: str, weights, bias: bool):
-    weight = weights.get_multi_weights_row(prefix, quantize=config.quantize)
+    weight = weights.get_weights_row(prefix)
 
     if bias and weights.process_group.rank() == 0:
         # Rank is only on the first rank process
@@ -31,7 +31,7 @@ def load_row(config, prefix: str, weights, bias: bool):
     else:
         bias = None
 
-    linear = get_linear(weight, bias, config.quantize)
+    linear = get_linear(weight, bias)
     if config.parallel_attn:
         return linear
     else:
@@ -42,6 +42,7 @@ class RWConfig(PretrainedConfig):
     attribute_map = {
         "num_hidden_layers": "n_layer",
         "num_attention_heads": "n_head",
+        "num_key_value_heads": "n_head_kv",
     }
 
     def __init__(
@@ -51,6 +52,7 @@ class RWConfig(PretrainedConfig):
         hidden_size=64,
         num_hidden_layers=None,
         num_attention_heads=None,
+        num_ln_in_prallel_attention=None,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=True,
@@ -64,6 +66,7 @@ class RWConfig(PretrainedConfig):
         new_decoder_architecture=None,
         bias=False,
         parallel_attn=False,
+        rope_theta=10_000.0,
         **kwargs,
     ):
         if alibi:
@@ -74,6 +77,8 @@ class RWConfig(PretrainedConfig):
         self.model_type = model_type
         self.alibi = False
         self.rotary = True
+        self.rope_theta = rope_theta
+        self.max_position_embeddings = 2048
 
         self.vocab_size = vocab_size
         # Backward compatibility with n_embed kwarg
@@ -90,6 +95,7 @@ class RWConfig(PretrainedConfig):
             else kwargs.pop("n_head", 8)
         )
         self.layer_norm_epsilon = layer_norm_epsilon
+        self.num_ln_in_parallel_attn = num_ln_in_prallel_attention
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.hidden_dropout = hidden_dropout
@@ -123,7 +129,7 @@ class FlashRWAttention(torch.nn.Module):
     def __init__(
         self,
         config,
-        prefix,
+        prefix: str,
         weights,
     ):
         super().__init__()
@@ -131,9 +137,13 @@ class FlashRWAttention(torch.nn.Module):
         self.num_heads_kv = config.n_head_kv
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_heads
+        self.rope_theta = config.rope_theta
 
         self.rotary_emb = PositionRotaryEmbedding.static(
-            config=config, dim=self.head_size, base=10000.0, device=weights.device
+            config=config,
+            dim=self.head_size,
+            base=self.rope_theta,
+            device=weights.device,
         )
         self.softmax_scale = self.head_size ** (-0.5)
 
@@ -150,6 +160,7 @@ class FlashRWAttention(torch.nn.Module):
             weights=weights,
             bias=config.bias,
         )
+        self.kv_scales = get_kv_scales(weights, f"{prefix}")
         self.dense = load_row(
             config, prefix=f"{prefix}.dense", weights=weights, bias=config.bias
         )
@@ -172,7 +183,7 @@ class FlashRWAttention(torch.nn.Module):
         kv_cache,
         block_tables,
         slots,
-        input_lengths,
+        seqlen,
         max_s,
     ):
         qkv = self.query_key_value(hidden_states)
@@ -188,43 +199,39 @@ class FlashRWAttention(torch.nn.Module):
         kv = kv.view(-1, 2, self.num_heads_kv, self.head_size)
 
         # Inplace rotary
-        self.rotary_emb(query, cos, sin)
-        self.rotary_emb(torch.select(kv, dim=1, index=0), cos, sin)
+        self.rotary_emb(query, torch.select(kv, dim=1, index=0), cos, sin)
 
-        vllm_cache_ops.reshape_and_cache(
-            kv[:, 0], kv[:, 1], kv_cache[0], kv_cache[1], slots
+        kv_cache.store(
+            key=kv[:, 0],
+            value=kv[:, 1],
+            slots=slots,
+            kv_scales=self.kv_scales,
         )
-
-        # output
-        attn_output = torch.empty_like(query)
 
         # Prefill
         if cu_seqlen_prefill is not None:
             # flash attention
-            attention(
-                query,
-                torch.select(kv, dim=1, index=0),
-                torch.select(kv, dim=1, index=1),
-                attn_output,
-                cu_seqlen_prefill,
-                max_s,
-                self.softmax_scale,
+            attn_output = attention(
+                query=query,
+                key=kv[:, 0],
+                value=kv[:, 1],
+                kv_cache=kv_cache,
+                kv_scales=self.kv_scales,
+                seqlen=seqlen,
+                block_tables=block_tables,
+                softmax_scale=self.softmax_scale,
             )
         # Decode
         else:
-            # kv_cache[1] => [num_blocks, num_heads_kv, head_size, block_size]
-            block_size = kv_cache[1].shape[3]
-            vllm_attention_ops.single_query_cached_kv_attention(
-                attn_output,
+            attn_output = paged_attention(
                 query,
-                kv_cache[0],
-                kv_cache[1],
+                kv_cache,
                 self.kv_head_mapping,
                 self.softmax_scale,
                 block_tables,
-                input_lengths,
-                block_size,
+                seqlen,
                 max_s,
+                kv_scales=self.kv_scales,
             )
 
         return self.dense(attn_output.view(-1, self.num_heads * self.head_size))
@@ -234,36 +241,43 @@ class FlashRWLargeAttention(torch.nn.Module):
     def __init__(
         self,
         config,
-        prefix,
+        prefix: str,
         weights,
     ):
         super().__init__()
 
         hidden_size = config.hidden_size
         num_heads = config.n_head
-        num_heads_kv = config.n_head_kv
+        # num_heads_kv = config.n_head_kv
+        num_groups = config.n_head_kv
 
         self.hidden_size = hidden_size
         self.head_size = hidden_size // num_heads
+        self.num_groups = num_groups
+        self.rope_theta = config.rope_theta
 
         self.rotary_emb = PositionRotaryEmbedding.static(
-            config=config, dim=self.head_size, base=10000.0, device=weights.device
+            config=config,
+            dim=self.head_size,
+            base=self.rope_theta,
+            device=weights.device,
         )
         self.softmax_scale = self.head_size ** (-0.5)
 
-        self.num_groups = num_heads // (num_heads_kv * 2)
+        # self.num_groups = num_heads // (num_heads_kv * 2)
         self.num_heads = num_heads // self.num_groups
-        self.num_heads_kv = num_heads_kv // self.num_groups
+        # self.num_heads_kv = num_heads_kv // self.num_groups
         process_group = weights.process_group
 
         if process_group.size() > self.num_groups:
             raise NotImplementedError(
-                f"Tensor Parallelism is not implemented for world_size > n groups"
+                "Tensor Parallelism is not implemented for world_size > n groups"
             )
         if self.num_groups % process_group.size() != 0:
             raise NotImplementedError(
                 f"Tensor Parallelism is not implemented for {self.num_groups} not divisible by {process_group.size()}"
             )
+
         self.num_groups = self.num_groups // process_group.size()
 
         self.query_key_value = TensorParallelColumnLinear.load(
@@ -272,6 +286,7 @@ class FlashRWLargeAttention(torch.nn.Module):
             weights=weights,
             bias=config.bias,
         )
+        self.kv_scales = get_kv_scales(weights, f"{prefix}")
         self.dense = load_row(
             config, prefix=f"{prefix}.dense", weights=weights, bias=config.bias
         )
@@ -289,7 +304,7 @@ class FlashRWLargeAttention(torch.nn.Module):
         kv_cache,
         block_tables,
         slots,
-        input_lengths,
+        seqlen,
         max_s,
     ):
         qkv = self.query_key_value(hidden_states)
@@ -304,47 +319,39 @@ class FlashRWLargeAttention(torch.nn.Module):
         query = query.reshape(-1, self.num_groups * self.num_heads, self.head_size)
 
         # Inplace rotary
-        self.rotary_emb(query, cos, sin)
-        self.rotary_emb(torch.select(kv, dim=2, index=0), cos, sin)
+        self.rotary_emb(query, torch.select(kv, dim=2, index=0), cos, sin)
 
-        vllm_cache_ops.reshape_and_cache(
-            kv[:, :, 0].contiguous(),
-            kv[:, :, 1].contiguous(),
-            kv_cache[0],
-            kv_cache[1],
-            slots,
+        kv_cache.store(
+            key=kv[:, :, 0].contiguous(),
+            value=kv[:, :, 1].contiguous(),
+            slots=slots,
+            kv_scales=self.kv_scales,
         )
-
-        # output
-        attn_output = torch.empty_like(query)
 
         # Prefill
         if cu_seqlen_prefill is not None:
             # flash attention
-            attention(
-                query,
-                torch.select(kv, dim=2, index=0),
-                torch.select(kv, dim=2, index=1),
-                attn_output,
-                cu_seqlen_prefill,
-                max_s,
-                self.softmax_scale,
+            attn_output = attention(
+                query=query,
+                key=kv[:, :, 0],
+                value=kv[:, :, 1],
+                kv_cache=kv_cache,
+                kv_scales=self.kv_scales,
+                seqlen=seqlen,
+                block_tables=block_tables,
+                softmax_scale=self.softmax_scale,
             )
         # Decode
         else:
-            # kv_cache[1] => [num_blocks, num_groups, head_size, block_size]
-            block_size = kv_cache[1].shape[3]
-            vllm_attention_ops.single_query_cached_kv_attention(
-                attn_output,
+            attn_output = paged_attention(
                 query,
-                kv_cache[0],
-                kv_cache[1],
+                kv_cache,
                 self.kv_head_mapping,
                 self.softmax_scale,
                 block_tables,
-                input_lengths,
-                block_size,
+                seqlen,
                 max_s,
+                kv_scales=self.kv_scales,
             )
 
         return self.dense(
@@ -353,7 +360,7 @@ class FlashRWLargeAttention(torch.nn.Module):
 
 
 class FlashMLP(nn.Module):
-    def __init__(self, config, prefix, weights):
+    def __init__(self, config, prefix: str, weights):
         super().__init__()
         self.act = torch.nn.functional.gelu
 
@@ -375,6 +382,7 @@ class FlashRWLayer(nn.Module):
     def __init__(
         self,
         layer_id,
+        prefix: str,
         config,
         weights,
     ):
@@ -383,10 +391,15 @@ class FlashRWLayer(nn.Module):
         parallel_attn = config.parallel_attn
         self.parallel_attn = parallel_attn
 
-        prefix = f"transformer.h.{layer_id}"
+        prefix = f"{prefix}.h.{layer_id}"
+
+        # NOTE: Falcon 180B uses the ln_attn prefix
+        ln_prefix = "input_layernorm"
+        if config.num_hidden_layers == 80:
+            ln_prefix = "ln_attn"
 
         self.input_layernorm = FastLayerNorm.load(
-            prefix=f"{prefix}.input_layernorm",
+            prefix=f"{prefix}.{ln_prefix}",
             weights=weights,
             eps=config.layer_norm_epsilon,
         )
@@ -423,7 +436,7 @@ class FlashRWLayer(nn.Module):
         kv_cache,
         block_tables,
         slots,
-        input_lengths,
+        seqlen,
         max_s,
     ):
         if self.parallel_attn:
@@ -437,7 +450,7 @@ class FlashRWLayer(nn.Module):
                 kv_cache,
                 block_tables,
                 slots,
-                input_lengths,
+                seqlen,
                 max_s,
             )
 
@@ -459,33 +472,71 @@ class FlashRWLayer(nn.Module):
                 kv_cache,
                 block_tables,
                 slots,
-                input_lengths,
+                seqlen,
                 max_s,
             )
 
-            hidden_states, residual = self.post_attention_layernorm(
-                hidden_states, residual
-            )
+            if self.post_attention_layernorm is not None:
+                hidden_states, residual = self.post_attention_layernorm(
+                    hidden_states, residual
+                )
 
             mlp_output = self.mlp(hidden_states)
 
             return mlp_output, residual
 
 
-class FlashRWLargeLayer(nn.Module):
-    def __init__(self, layer_id, config, weights):
+class FlashRWLayerNorm(nn.Module):
+    def __init__(self, config, prefix: str, weights):
         super().__init__()
-        prefix = f"transformer.h.{layer_id}"
-        self.ln_attn = FastLayerNorm.load(
-            prefix=f"{prefix}.ln_attn",
-            weights=weights,
-            eps=config.layer_norm_epsilon,
-        )
-        self.ln_mlp = FastLayerNorm.load(
-            prefix=f"{prefix}.ln_mlp",
-            weights=weights,
-            eps=config.layer_norm_epsilon,
-        )
+        # Falcon2 includes the number of layer norms in the config
+        # in the case no number of layer norms is provided, we default to 1
+        self.num_ln = getattr(config, "num_ln_in_parallel_attn", 1)
+
+        # Falcon 180B uses the ln_attn prefix and has 2 layer norms
+        if config.num_hidden_layers == 80:
+            self.num_ln = 2
+
+        if self.num_ln == 1:
+            self.input_ln = FastLayerNorm.load(
+                prefix=f"{prefix}.input_layernorm",
+                weights=weights,
+                eps=config.layer_norm_epsilon,
+            )
+        elif self.num_ln == 2:
+            self.ln_attn = FastLayerNorm.load(
+                prefix=f"{prefix}.ln_attn",
+                weights=weights,
+                eps=config.layer_norm_epsilon,
+            )
+            self.ln_mlp = FastLayerNorm.load(
+                prefix=f"{prefix}.ln_mlp",
+                weights=weights,
+                eps=config.layer_norm_epsilon,
+            )
+        else:
+            raise ValueError("Number of layer norms can either be 1 or 2.")
+
+    def forward(
+        self,
+        hidden_states,
+        residual,
+    ):
+        if self.num_ln == 1:
+            ln_hidden_states, residual = self.input_ln(hidden_states, residual)
+            return ln_hidden_states, ln_hidden_states, residual
+        elif self.num_ln == 2:
+            ln_attn, residual = self.ln_attn(hidden_states, residual)
+            ln_mlp, _ = self.ln_mlp(residual)
+            return ln_attn, ln_mlp, residual
+
+
+class FlashRWLargeLayer(nn.Module):
+    def __init__(self, layer_id, prefix: str, config, weights):
+        super().__init__()
+        prefix = f"{prefix}.h.{layer_id}"
+
+        self.ln_layer = FlashRWLayerNorm(config, prefix, weights)
 
         self.self_attention = FlashRWLargeAttention(
             config,
@@ -508,11 +559,11 @@ class FlashRWLargeLayer(nn.Module):
         kv_cache,
         block_tables,
         slots,
-        input_lengths,
+        seqlen,
         max_s,
     ):
-        ln_attn, residual = self.ln_attn(hidden_states, residual)
-        ln_mlp, _ = self.ln_mlp(residual)
+        # Layer norm.
+        ln_attn, ln_mlp, residual = self.ln_layer(hidden_states, residual)
 
         # Self attention.
         attn_output = self.self_attention(
@@ -523,7 +574,7 @@ class FlashRWLargeLayer(nn.Module):
             kv_cache,
             block_tables,
             slots,
-            input_lengths,
+            seqlen,
             max_s,
         )
 
@@ -543,18 +594,18 @@ class FlashRWPreTrainedModel(PreTrainedModel):
 
 
 class FlashRWModel(FlashRWPreTrainedModel):
-    def __init__(self, config, weights):
+    def __init__(self, prefix: str, config, weights):
         super().__init__(config)
         self.config = config
 
         self.word_embeddings = TensorParallelEmbedding(
-            prefix="transformer.word_embeddings", weights=weights
+            prefix=f"{prefix}.word_embeddings", weights=weights
         )
 
         if config.new_decoder_architecture:
             self.h = nn.ModuleList(
                 [
-                    FlashRWLargeLayer(layer_id, config, weights)
+                    FlashRWLargeLayer(layer_id, prefix, config, weights)
                     for layer_id in range(config.num_hidden_layers)
                 ]
             )
@@ -562,14 +613,14 @@ class FlashRWModel(FlashRWPreTrainedModel):
         else:
             self.h = nn.ModuleList(
                 [
-                    FlashRWLayer(layer_id, config, weights)
+                    FlashRWLayer(layer_id, prefix, config, weights)
                     for layer_id in range(config.num_hidden_layers)
                 ]
             )
             self.cache_size = self.h[0].self_attention.num_heads_kv
 
         self.ln_f = FastLayerNorm.load(
-            prefix="transformer.ln_f",
+            prefix=f"{prefix}.ln_f",
             weights=weights,
             eps=config.layer_norm_epsilon,
         )
@@ -584,7 +635,7 @@ class FlashRWModel(FlashRWPreTrainedModel):
         kv_cache: List[Tuple[torch.Tensor, torch.Tensor]],
         block_tables: torch.Tensor,
         slots: torch.Tensor,
-        input_lengths: torch.Tensor,
+        seqlen: Seqlen,
         max_s: int,
     ) -> torch.Tensor:
         hidden_states = self.word_embeddings(input_ids)
@@ -606,7 +657,7 @@ class FlashRWModel(FlashRWPreTrainedModel):
                 kv_cache[i],
                 block_tables,
                 slots,
-                input_lengths,
+                seqlen,
                 max_s,
             )
 
@@ -616,14 +667,17 @@ class FlashRWModel(FlashRWPreTrainedModel):
 
 
 class FlashRWForCausalLM(FlashRWPreTrainedModel):
-    def __init__(self, config, weights):
+    def __init__(self, prefix: str, config, weights):
         super().__init__(config)
 
-        self.transformer = FlashRWModel(config, weights)
+        if not prefix:
+            prefix = "transformer"
+        else:
+            prefix = f"{prefix}.transformer"
 
-        self.lm_head = TensorParallelHead.load(
-            config, prefix="lm_head", weights=weights
-        )
+        self.transformer = FlashRWModel(prefix, config, weights)
+
+        self.lm_head = SpeculativeHead.load(config, prefix="lm_head", weights=weights)
 
     def forward(
         self,
@@ -633,9 +687,11 @@ class FlashRWForCausalLM(FlashRWPreTrainedModel):
         kv_cache: List[Tuple[torch.Tensor, torch.Tensor]],
         block_tables: torch.Tensor,
         slots: torch.Tensor,
-        input_lengths: torch.Tensor,
+        seqlen: Seqlen,
         max_s: int,
+        prefill_cache_indices: Optional[torch.Tensor],
         lm_head_indices: Optional[torch.Tensor] = None,
+        adapter_data: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         hidden_states = self.transformer(
             input_ids,
@@ -644,7 +700,7 @@ class FlashRWForCausalLM(FlashRWPreTrainedModel):
             kv_cache,
             block_tables,
             slots,
-            input_lengths,
+            seqlen,
             max_s,
         )
         if lm_head_indices is not None:

@@ -1,12 +1,18 @@
-import math
-import torch
-
 from functools import lru_cache
-from typing import Optional, List, Dict, Union
+import math
+import time
+import torch
+from typing import List, Optional, DefaultDict
+
+from loguru import logger
+from typing import Dict
+from text_generation_server.pb.generate_pb2 import GrammarType
+
+from outlines.fsm.guide import RegexGuide
 
 from transformers import (
-    LogitsWarper,
     LogitsProcessor,
+    PreTrainedTokenizerBase,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -118,6 +124,69 @@ class HeterogeneousRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         return None
 
 
+class FrequencyPenaltyLogitsProcessor(LogitsProcessor):
+    r"""
+    Frequency penalty as defined by OpenAI
+
+    Args:
+        penalty (`float`):
+            The parameter for frequency penalty. 0.0 means no penalty.
+    """
+
+    def __init__(self, penalty: float):
+        self.penalty = penalty
+
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
+    ) -> torch.FloatTensor:
+        score = torch.gather(scores, 1, input_ids)
+        # if score < 0 then penalty has to be multiplied to reduce the previous token probability
+        score = -torch.where(score < 0, score * self.penalty, score / self.penalty)
+        # set score to 0 where input_ids is a padding token
+        score *= input_ids.ne(0)
+
+        return scores.scatter_add_(1, input_ids, score)
+
+
+class HeterogeneousFrequencyPenaltyLogitsProcessor(LogitsProcessor):
+    r"""
+    Frequency penalty as defined by OpenAI in
+    https://platform.openai.com/docs/guides/text-generation/parameter-details
+
+    Args:
+        frequency_penalty (`List[float]`):
+            The parameter for frequency penalty. 0.0 means no penalty.
+    """
+
+    def __init__(self, penalty: List[float], dtype: torch.dtype, device: torch.device):
+        self.penalty = penalty
+        self.penalty_tensor = torch.tensor(
+            penalty, dtype=dtype, device=device
+        ).unsqueeze(1)
+
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
+        batch_size, input_size = input_ids.size()
+        vocab_size = scores.size(1)
+
+        # Calculate the frequency for each token so far
+        token_freq = torch.zeros(batch_size, vocab_size, device=input_ids.device)
+        token_freq.scatter_add_(
+            1, input_ids, torch.ones_like(input_ids, dtype=torch.float)
+        )
+        token_freq /= input_size
+
+        # Apply the frequency penalty to logits
+        scores -= token_freq * self.penalty_tensor
+        return scores
+
+    def filter(self, indices):
+        self.penalty = [self.penalty[i] for i in indices]
+        if any([x != 0.0 for x in self.penalty]):
+            self.penalty_tensor = self.penalty_tensor[indices]
+            return self
+        return None
+
+
 class HeterogeneousTemperatureLogitsWarper:
     r"""
     [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
@@ -149,7 +218,7 @@ class HeterogeneousTemperatureLogitsWarper:
         return None
 
 
-class HeterogeneousTopPLogitsWarper(LogitsWarper):
+class HeterogeneousTopPLogitsWarper(LogitsProcessor):
     """
     [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
     This version allows for a separate value for each sample and runs inplace when possible.
@@ -208,7 +277,7 @@ class HeterogeneousTopPLogitsWarper(LogitsWarper):
         return None
 
 
-class HeterogeneousTopKLogitsWarper(LogitsWarper):
+class HeterogeneousTopKLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
     This version allows for a separate value for each sample and runs inplace when possible.
@@ -289,7 +358,7 @@ class HeterogeneousTopKLogitsWarper(LogitsWarper):
         return None
 
 
-class HeterogeneousTypicalLogitsWarper(LogitsWarper):
+class HeterogeneousTypicalLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsWarper`] that performs typical decoding. See [Typical Decoding for Natural Language
     Generation](https://arxiv.org/abs/2202.00666) for more information.
@@ -383,13 +452,13 @@ class HeterogeneousProcessorWrapper(LogitsProcessor):
     r"""
     A wrapper for logit warpers or processors without heterogeneous parameter support.
     Args:
-        processors (`Dict[int, Union[LogitsProcessor, LogitsWarper]]`):
+        processors (`Dict[int, LogitsProcessor]`):
             A mapping of sample indices to logit warpers or processors, to be run sequentially.
     """
 
     def __init__(
         self,
-        processors: Dict[int, Union[LogitsProcessor, LogitsWarper]],
+        processors: Dict[int, LogitsProcessor],
     ):
         self.processors = processors
 
@@ -408,3 +477,149 @@ class HeterogeneousProcessorWrapper(LogitsProcessor):
             self.processors = new_processors
             return self
         return None
+
+
+class GrammarLogitProcessor(LogitsProcessor):
+    fsm_state: DefaultDict[int, int]
+    fsm: RegexGuide
+
+    def __init__(
+        self,
+        tokenizer: Optional[PreTrainedTokenizerBase],
+        device: str,
+        grammar: str,
+        grammar_type: GrammarType,
+    ):
+        self.device = device
+        self.tokenizer = GrammarLogitProcessor._cached_adapt_tokenizer(tokenizer)
+        self.fsm = GrammarLogitProcessor._cached_compile_fsm(
+            grammar_type, grammar, self.tokenizer
+        )
+
+    def __call__(
+        self,
+        logits: torch.Tensor,
+        fsm_grammar_state: int,
+    ):
+        if fsm_grammar_state == -1 or self.fsm is None:
+            return logits
+        allowed_tokens = self.fsm.get_next_instruction(fsm_grammar_state).tokens
+        mask = torch.full_like(logits, -math.inf)
+        if allowed_tokens is not None:
+            mask[:, allowed_tokens] = 0
+        biased_scores = logits + mask
+        return biased_scores
+
+    def advance(self, next_token_id, fsm_grammar_state):
+        return GrammarLogitProcessor._advance(
+            next_token_id, fsm_grammar_state, self.fsm
+        )
+
+    @staticmethod
+    def _advance(next_token_id, fsm_grammar_state, fsm):
+        if fsm_grammar_state == -1:
+            return fsm_grammar_state
+        return fsm.get_next_state(fsm_grammar_state, next_token_id)
+
+    # TODO: move grammar compilation into the router
+    @staticmethod
+    @lru_cache(maxsize=32, typed=True)
+    def _cached_compile_fsm(
+        grammar_type: GrammarType,
+        schema: str,
+        tokenizer: Optional[PreTrainedTokenizerBase],
+    ):
+        start_time = time.time()
+        if grammar_type == GrammarType.GRAMMAR_TYPE_JSON:
+            # JSON schema is compiled by the v3 router.
+            logger.error(
+                "Non-regex grammars must be compiled by the router, grammar won't be enforced"
+            )
+            # allows everything
+            schema = "(.*?)"
+
+        fsm = RegexGuide.from_regex(schema, tokenizer)
+        logger.debug(f"Compiled FSM in {time.time() - start_time:.2f}s")
+        return fsm
+
+    @staticmethod
+    @lru_cache(maxsize=32, typed=True)
+    def _cached_adapt_tokenizer(tokenizer):
+        """Adapt tokenizer to work with the FSM.
+
+        The API of Outlines tokenizers is slightly different to that of
+        `transformers`. In addition we need to handle the missing spaces to
+        Llama's tokenizer to be able to compile FSMs for this model.
+
+        """
+        start_time = time.time()
+        tokenizer.vocabulary = tokenizer.get_vocab()
+        tokenizer.special_tokens = set(tokenizer.all_special_tokens)
+
+        def convert_token_to_string(token: str) -> str:
+            from transformers.file_utils import SPIECE_UNDERLINE
+
+            string = tokenizer.convert_tokens_to_string([token])
+
+            # A hack to handle missing spaces to HF's Llama tokenizers
+            if token.startswith(SPIECE_UNDERLINE) or token == "<0x20>":
+                return " " + string
+
+            return string
+
+        tokenizer.convert_token_to_string = convert_token_to_string
+        logger.debug(f"Adapted tokenizer in {time.time() - start_time:.2f}s")
+        return tokenizer
+
+
+class HeterogeneousGrammarLogitProcessor(LogitsProcessor):
+    def __init__(self, tokenizer, device, grammars, grammar_types):
+        self.device = device
+        self.tokenizer = GrammarLogitProcessor._cached_adapt_tokenizer(tokenizer)
+        self.fsms = []
+        for grammar, grammar_type in zip(grammars, grammar_types):
+            if len(grammar) == 0:
+                self.fsms.append(None)
+                continue
+            fsm = GrammarLogitProcessor._cached_compile_fsm(
+                grammar_type, grammar, self.tokenizer
+            )
+            self.fsms.append(fsm)
+
+    def __call__(
+        self,
+        logits: torch.Tensor,
+        fsm_grammar_states: List[int],
+    ):
+        mask = torch.full_like(logits, -math.inf)
+        for i in range(logits.shape[0]):
+            fsm = self.fsms[i]
+            if fsm_grammar_states[i] == -1 or fsm is None:
+                continue
+            allowed_tokens = fsm.get_next_instruction(fsm_grammar_states[i]).tokens
+            if allowed_tokens is not None:
+                mask[i, allowed_tokens] = 0
+            logits[i] += mask[i]
+        return logits
+
+    def advance_batch(self, next_token_ids, fsm_grammar_states):
+        return [
+            GrammarLogitProcessor._advance(
+                next_token_ids[i], fsm_grammar_states[i], self.fsms[i]
+            )
+            for i in range(len(next_token_ids))
+        ]
+
+    def advance_at_index(self, next_token_id, fsm_grammar_state, index):
+        if self.fsms[index] is None:
+            return fsm_grammar_state
+        return GrammarLogitProcessor._advance(
+            next_token_id, fsm_grammar_state, self.fsms[index]
+        )
+
+    def filter(self, indices):
+        new_fsms = []
+        for i in indices:
+            new_fsms.append(self.fsms[i])
+        self.fsms = new_fsms
+        return self

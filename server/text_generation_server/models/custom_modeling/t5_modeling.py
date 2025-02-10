@@ -38,12 +38,21 @@ from transformers.utils import (
     is_torch_fx_proxy,
 )
 from transformers import T5Config
-from text_generation_server.utils.layers import (
+from text_generation_server.layers import (
     TensorParallelColumnLinear,
     TensorParallelEmbedding,
     TensorParallelRowLinear,
-    TensorParallelHead,
+    SpeculativeHead,
 )
+
+# copied from https://github.com/huggingface/transformers/blob/cd4584e3c809bb9e1392ccd3fe38b40daba5519a/src/transformers/models/t5/modeling_t5.py#L1316
+# Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+__HEAD_MASK_WARNING_MSG = """
+The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
+`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
+If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = torch.ones(num_layers,
+num_heads)`.
+"""
 
 
 class PartialTPEmbedding(nn.Module):
@@ -1032,9 +1041,17 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             embed_tokens=self.shared,
         )
 
-        self.lm_head = TensorParallelHead.load(
-            config, prefix="lm_head", weights=weights
-        )
+        try:
+            self.lm_head = SpeculativeHead.load(
+                config, prefix="lm_head", weights=weights
+            )
+        except RuntimeError:
+            # Some models like t5-small were saved with shared weights unlike flan
+            # Since they are declared as the same arch we have no choice but hope
+            # that this is OK instead of using a proper flag.
+            self.lm_head = SpeculativeHead.load(
+                config, prefix="shared", weights=weights
+            )
 
     def forward(
         self,
@@ -1118,30 +1135,33 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
             sequence_output = sequence_output * (self.model_dim**-0.5)
 
-        lm_logits = self.lm_head(sequence_output)
+        logits, speculative_logits = self.lm_head(sequence_output)
 
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # move labels to correct device to enable PP
-            labels = labels.to(lm_logits.device)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            labels = labels.to(logits.device)
+            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         if not return_dict:
-            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
+            output = (logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
-        return Seq2SeqLMOutput(
-            loss=loss,
-            logits=lm_logits,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+        return (
+            Seq2SeqLMOutput(
+                loss=loss,
+                logits=logits,
+                past_key_values=decoder_outputs.past_key_values,
+                decoder_hidden_states=decoder_outputs.hidden_states,
+                decoder_attentions=decoder_outputs.attentions,
+                cross_attentions=decoder_outputs.cross_attentions,
+                encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+                encoder_hidden_states=encoder_outputs.hidden_states,
+                encoder_attentions=encoder_outputs.attentions,
+            ),
+            speculative_logits,
         )
 
     def prepare_inputs_for_generation(

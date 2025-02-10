@@ -9,6 +9,9 @@ from typing import Callable, Any
 
 
 class ExceptionInterceptor(AsyncServerInterceptor):
+    def __init__(self, shutdown_callback):
+        self.shutdown_callback = shutdown_callback
+
     async def intercept(
         self,
         method: Callable,
@@ -22,6 +25,10 @@ class ExceptionInterceptor(AsyncServerInterceptor):
         except Exception as err:
             method_name = method_name.split("/")[-1]
             logger.exception(f"Method {method_name} encountered an error.")
+
+            # Runtime Error cannot be recovered from
+            if isinstance(err, RuntimeError):
+                self.shutdown_callback()
 
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

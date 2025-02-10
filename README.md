@@ -1,6 +1,8 @@
 <div align="center">
 
-![image](https://github.com/huggingface/text-generation-inference/assets/3841370/38ba1531-ea0d-4851-b31a-a6d4ddc944b0)
+<a href="https://www.youtube.com/watch?v=jlMAX2Oaht0">
+  <img width=560 alt="Making TGI deployment optimal" src="https://huggingface.co/datasets/Narsil/tgi_assets/resolve/main/thumbnail.png">
+</a>
 
 # Text Generation Inference
 
@@ -11,120 +13,119 @@
   <img alt="Swagger API documentation" src="https://img.shields.io/badge/API-Swagger-informational">
 </a>
 
-A Rust, Python and gRPC server for text generation inference. Used in production at [HuggingFace](https://huggingface.co)
+A Rust, Python and gRPC server for text generation inference. Used in production at [Hugging Face](https://huggingface.co)
 to power Hugging Chat, the Inference API and Inference Endpoint.
 
 </div>
 
 ## Table of contents
 
-- [Features](#features)
-- [Optimized Architectures](#optimized-architectures)
-- [Get Started](#get-started)
-  - [Docker](#docker)
-  - [API Documentation](#api-documentation)
-  - [Using a private or gated model](#using-a-private-or-gated-model)
-  - [A note on Shared Memory](#a-note-on-shared-memory-shm)
-  - [Distributed Tracing](#distributed-tracing)
-  - [Local Install](#local-install)
-  - [CUDA Kernels](#cuda-kernels)
-- [Run Falcon](#run-falcon)
-  - [Run](#run)
-  - [Quantization](#quantization)
-- [Develop](#develop)
-- [Testing](#testing)
-- [Other supported hardware](#other-supported-hardware)
+  - [Get Started](#get-started)
+    - [Docker](#docker)
+    - [API documentation](#api-documentation)
+    - [Using a private or gated model](#using-a-private-or-gated-model)
+    - [A note on Shared Memory (shm)](#a-note-on-shared-memory-shm)
+    - [Distributed Tracing](#distributed-tracing)
+    - [Architecture](#architecture)
+    - [Local install](#local-install)
+    - [Local install (Nix)](#local-install-nix)
+  - [Optimized architectures](#optimized-architectures)
+  - [Run locally](#run-locally)
+    - [Run](#run)
+    - [Quantization](#quantization)
+  - [Develop](#develop)
+  - [Testing](#testing)
 
-## Features
+Text Generation Inference (TGI) is a toolkit for deploying and serving Large Language Models (LLMs). TGI enables high-performance text generation for the most popular open-source LLMs, including Llama, Falcon, StarCoder, BLOOM, GPT-NeoX, and [more](https://huggingface.co/docs/text-generation-inference/supported_models). TGI implements many features, such as:
 
-- Serve the most popular Large Language Models with a simple launcher
+- Simple launcher to serve most popular LLMs
+- Production ready (distributed tracing with Open Telemetry, Prometheus metrics)
 - Tensor Parallelism for faster inference on multiple GPUs
 - Token streaming using Server-Sent Events (SSE)
-- [Continuous batching of incoming requests](https://github.com/huggingface/text-generation-inference/tree/main/router) for increased total throughput
-- Optimized transformers code for inference using [flash-attention](https://github.com/HazyResearch/flash-attention) and [Paged Attention](https://github.com/vllm-project/vllm) on the most popular architectures
-- Quantization with [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) and [GPT-Q](https://arxiv.org/abs/2210.17323)
+- Continuous batching of incoming requests for increased total throughput
+- [Messages API](https://huggingface.co/docs/text-generation-inference/en/messages_api) compatible with Open AI Chat Completion API
+- Optimized transformers code for inference using [Flash Attention](https://github.com/HazyResearch/flash-attention) and [Paged Attention](https://github.com/vllm-project/vllm) on the most popular architectures
+- Quantization with :
+  - [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
+  - [GPT-Q](https://arxiv.org/abs/2210.17323)
+  - [EETQ](https://github.com/NetEase-FuXi/EETQ)
+  - [AWQ](https://github.com/casper-hansen/AutoAWQ)
+  - [Marlin](https://github.com/IST-DASLab/marlin)
+  - [fp8](https://developer.nvidia.com/blog/nvidia-arm-and-intel-publish-fp8-specification-for-standardization-as-an-interchange-format-for-ai/)
 - [Safetensors](https://github.com/huggingface/safetensors) weight loading
 - Watermarking with [A Watermark for Large Language Models](https://arxiv.org/abs/2301.10226)
 - Logits warper (temperature scaling, top-p, top-k, repetition penalty, more details see [transformers.LogitsProcessor](https://huggingface.co/docs/transformers/internal/generation_utils#transformers.LogitsProcessor))
 - Stop sequences
 - Log probabilities
-- Production ready (distributed tracing with Open Telemetry, Prometheus metrics)
+- [Speculation](https://huggingface.co/docs/text-generation-inference/conceptual/speculation) ~2x latency
+- [Guidance/JSON](https://huggingface.co/docs/text-generation-inference/conceptual/guidance). Specify output format to speed up inference and make sure the output is valid according to some specs..
+- Custom Prompt Generation: Easily generate text by providing custom prompts to guide the model's output
+- Fine-tuning Support: Utilize fine-tuned models for specific tasks to achieve higher accuracy and performance
 
-## Optimized architectures
+### Hardware support
 
-- [BLOOM](https://huggingface.co/bigscience/bloom)
-- [FLAN-T5](https://huggingface.co/google/flan-t5-xxl)
-- [Galactica](https://huggingface.co/facebook/galactica-120b)
-- [GPT-Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)
-- [Llama](https://github.com/facebookresearch/llama)
-- [OPT](https://huggingface.co/facebook/opt-66b)
-- [SantaCoder](https://huggingface.co/bigcode/santacoder)
-- [Starcoder](https://huggingface.co/bigcode/starcoder)
-- [Falcon 7B](https://huggingface.co/tiiuae/falcon-7b)
-- [Falcon 40B](https://huggingface.co/tiiuae/falcon-40b)
-- [MPT](https://huggingface.co/mosaicml/mpt-30b)
-- [Llama V2](https://huggingface.co/meta-llama)
+- [Nvidia](https://github.com/huggingface/text-generation-inference/pkgs/container/text-generation-inference)
+- [AMD](https://github.com/huggingface/text-generation-inference/pkgs/container/text-generation-inference) (-rocm)
+- [Inferentia](https://github.com/huggingface/optimum-neuron/tree/main/text-generation-inference)
+- [Intel GPU](https://github.com/huggingface/text-generation-inference/pull/1475)
+- [Gaudi](https://github.com/huggingface/tgi-gaudi)
+- [Google TPU](https://huggingface.co/docs/optimum-tpu/howto/serving)
 
-Other architectures are supported on a best effort basis using:
 
-`AutoModelForCausalLM.from_pretrained(<model>, device_map="auto")`
-
-or
-
-`AutoModelForSeq2SeqLM.from_pretrained(<model>, device_map="auto")`
-
-## Get started
+## Get Started
 
 ### Docker
 
-The easiest way of getting started is using the official Docker container:
+For a detailed starting guide, please see the [Quick Tour](https://huggingface.co/docs/text-generation-inference/quicktour). The easiest way of getting started is using the official Docker container:
 
 ```shell
-model=tiiuae/falcon-7b-instruct
-volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
+model=HuggingFaceH4/zephyr-7b-beta
+# share a volume with the Docker container to avoid downloading weights every run
+volume=$PWD/data
 
-docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
-```
-**Note:** To use GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html). We also recommend using NVIDIA drivers with CUDA version 11.8 or higher.
-
-To see all options to serve your models (in the [code](https://github.com/huggingface/text-generation-inference/blob/main/launcher/src/main.rs) or in the cli:
-```
-text-generation-launcher --help
+docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data \
+    ghcr.io/huggingface/text-generation-inference:3.1.0 --model-id $model
 ```
 
-You can then query the model using either the `/generate` or `/generate_stream` routes:
+And then you can make requests like
 
-```shell
-curl 127.0.0.1:8080/generate \
-    -X POST \
-    -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
-    -H 'Content-Type: application/json'
-```
-
-```shell
+```bash
 curl 127.0.0.1:8080/generate_stream \
     -X POST \
     -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
     -H 'Content-Type: application/json'
 ```
 
-or from Python:
+You can also use [TGI's Messages API](https://huggingface.co/docs/text-generation-inference/en/messages_api) to obtain Open AI Chat Completion API compatible responses.
 
-```shell
-pip install text-generation
+```bash
+curl localhost:8080/v1/chat/completions \
+    -X POST \
+    -d '{
+  "model": "tgi",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant."
+    },
+    {
+      "role": "user",
+      "content": "What is deep learning?"
+    }
+  ],
+  "stream": true,
+  "max_tokens": 20
+}' \
+    -H 'Content-Type: application/json'
 ```
 
-```python
-from text_generation import Client
+**Note:** To use NVIDIA GPUs, you need to install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html). We also recommend using NVIDIA drivers with CUDA version 12.2 or higher. For running the Docker container on a machine with no GPUs or CUDA support, it is enough to remove the `--gpus all` flag and add `--disable-custom-kernels`, please note CPU is not the intended platform for this project, so performance might be subpar.
 
-client = Client("http://127.0.0.1:8080")
-print(client.generate("What is Deep Learning?", max_new_tokens=20).generated_text)
+**Note:** TGI supports AMD Instinct MI210 and MI250 GPUs. Details can be found in the [Supported Hardware documentation](https://huggingface.co/docs/text-generation-inference/installation_amd#using-tgi-with-amd-gpus). To use AMD GPUs, please use `docker run --device /dev/kfd --device /dev/dri --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:3.1.0-rocm --model-id $model` instead of the command above.
 
-text = ""
-for response in client.generate_stream("What is Deep Learning?", max_new_tokens=20):
-    if not response.token.special:
-        text += response.token.text
-print(text)
+To see all options to serve your models (in the [code](https://github.com/huggingface/text-generation-inference/blob/main/launcher/src/main.rs) or in the cli):
+```
+text-generation-launcher --help
 ```
 
 ### API documentation
@@ -134,29 +135,30 @@ The Swagger UI is also available at: [https://huggingface.github.io/text-generat
 
 ### Using a private or gated model
 
-You have the option to utilize the `HUGGING_FACE_HUB_TOKEN` environment variable for configuring the token employed by
+You have the option to utilize the `HF_TOKEN` environment variable for configuring the token employed by
 `text-generation-inference`. This allows you to gain access to protected resources.
 
 For example, if you want to serve the gated Llama V2 model variants:
 
 1. Go to https://huggingface.co/settings/tokens
-2. Copy your cli READ token
-3. Export `HUGGING_FACE_HUB_TOKEN=<your cli READ token>`
+2. Copy your CLI READ token
+3. Export `HF_TOKEN=<your CLI READ token>`
 
 or with Docker:
 
 ```shell
-model=meta-llama/Llama-2-7b-chat-hf
+model=meta-llama/Meta-Llama-3.1-8B-Instruct
 volume=$PWD/data # share a volume with the Docker container to avoid downloading weights every run
 token=<your cli READ token>
 
-docker run --gpus all --shm-size 1g -e HUGGING_FACE_HUB_TOKEN=$token -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:1.0.0 --model-id $model
+docker run --gpus all --shm-size 1g -e HF_TOKEN=$token -p 8080:80 -v $volume:/data \
+    ghcr.io/huggingface/text-generation-inference:3.1.0 --model-id $model
 ```
 
 ### A note on Shared Memory (shm)
 
 [`NCCL`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html) is a communication framework used by
-`PyTorch` to do distributed training/inference. `text-generation-inference` make
+`PyTorch` to do distributed training/inference. `text-generation-inference` makes
 use of `NCCL` to enable Tensor Parallelism to dramatically speed up inference for large language models.
 
 In order to share data between the different devices of a `NCCL` group, `NCCL` might fall back to using the host memory if
@@ -182,20 +184,39 @@ this will impact performance.
 ### Distributed Tracing
 
 `text-generation-inference` is instrumented with distributed tracing using OpenTelemetry. You can use this feature
-by setting the address to an OTLP collector with the `--otlp-endpoint` argument.
+by setting the address to an OTLP collector with the `--otlp-endpoint` argument. The default service name can be
+overridden with the `--otlp-service-name` argument
+
+### Architecture
+
+![TGI architecture](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/TGI.png)
+
+Detailed blogpost by Adyen on TGI inner workings: [LLM inference at scale with TGI (Martin Iglesias Goyanes - Adyen, 2024)](https://www.adyen.com/knowledge-hub/llm-inference-at-scale-with-tgi)
 
 ### Local install
 
 You can also opt to install `text-generation-inference` locally.
 
-First [install Rust](https://rustup.rs/) and create a Python virtual environment with at least
-Python 3.9, e.g. using `conda`:
+First clone the repository and change directory into it:
+
+```shell
+git clone https://github.com/huggingface/text-generation-inference
+cd text-generation-inference
+```
+
+Then [install Rust](https://rustup.rs/) and create a Python virtual environment with at least
+Python 3.9, e.g. using `conda` or `python venv`:
 
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-conda create -n text-generation-inference python=3.9
+#using conda
+conda create -n text-generation-inference python=3.11
 conda activate text-generation-inference
+
+#using python venv
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 You may also need to install Protoc.
@@ -220,7 +241,7 @@ Then run:
 
 ```shell
 BUILD_EXTENSIONS=True make install # Install repository and HF/transformer fork with CUDA kernels
-make run-falcon-7b-instruct
+text-generation-launcher --model-id mistralai/Mistral-7B-Instruct-v0.2
 ```
 
 **Note:** on some machines, you may also need the OpenSSL libraries and gcc. On Linux machines, run:
@@ -229,30 +250,77 @@ make run-falcon-7b-instruct
 sudo apt-get install libssl-dev gcc -y
 ```
 
-### CUDA Kernels
+### Local install (Nix)
 
-The custom CUDA kernels are only tested on NVIDIA A100s. If you have any installation or runtime issues, you can remove
-the kernels by using the `DISABLE_CUSTOM_KERNELS=True` environment variable.
+Another option is to install `text-generation-inference` locally using [Nix](https://nixos.org). Currently,
+we only support Nix on x86_64 Linux with CUDA GPUs. When using Nix, all dependencies can
+be pulled from a binary cache, removing the need to build them locally.
 
-Be aware that the official Docker image has them enabled by default.
+First follow the instructions to [install Cachix and enable the TGI cache](https://app.cachix.org/cache/text-generation-inference).
+Setting up the cache is important, otherwise Nix will build many of the dependencies
+locally, which can take hours.
 
-## Run Falcon
+After that you can run TGI with `nix run`:
+
+```shell
+nix run . -- --model-id meta-llama/Llama-3.1-8B-Instruct
+```
+
+**Note:** when you are using Nix on a non-NixOS system, you have to [make some symlinks](https://danieldk.eu/Nix-CUDA-on-non-NixOS-systems#make-runopengl-driverlib-and-symlink-the-driver-library)
+to make the CUDA driver libraries visible to Nix packages.
+
+For TGI development, you can use the `impure` dev shell:
+
+```shell
+nix develop .#impure
+
+# Only needed the first time the devshell is started or after updating the protobuf.
+(
+cd server
+mkdir text_generation_server/pb || true
+python -m grpc_tools.protoc -I../proto/v3 --python_out=text_generation_server/pb \
+       --grpc_python_out=text_generation_server/pb --mypy_out=text_generation_server/pb ../proto/v3/generate.proto
+find text_generation_server/pb/ -type f -name "*.py" -print0 -exec sed -i -e 's/^\(import.*pb2\)/from . \1/g' {} \;
+touch text_generation_server/pb/__init__.py
+)
+```
+
+All development dependencies (cargo, Python, Torch), etc. are available in this
+dev shell.
+
+## Optimized architectures
+
+TGI works out of the box to serve optimized models for all modern models. They can be found in [this list](https://huggingface.co/docs/text-generation-inference/supported_models).
+
+Other architectures are supported on a best-effort basis using:
+
+`AutoModelForCausalLM.from_pretrained(<model>, device_map="auto")`
+
+or
+
+`AutoModelForSeq2SeqLM.from_pretrained(<model>, device_map="auto")`
+
+
+
+## Run locally
 
 ### Run
 
 ```shell
-make run-falcon-7b-instruct
+text-generation-launcher --model-id mistralai/Mistral-7B-Instruct-v0.2
 ```
 
 ### Quantization
 
-You can also quantize the weights with bitsandbytes to reduce the VRAM requirement:
+You can also run pre-quantized weights (AWQ, GPTQ, Marlin) or on-the-fly quantize weights with bitsandbytes, EETQ, fp8, to reduce the VRAM requirement:
 
 ```shell
-make run-falcon-7b-instruct-quantize
+text-generation-launcher --model-id mistralai/Mistral-7B-Instruct-v0.2 --quantize
 ```
 
 4bit quantization is available using the [NF4 and FP4 data types from bitsandbytes](https://arxiv.org/pdf/2305.14314.pdf). It can be enabled by providing `--quantize bitsandbytes-nf4` or `--quantize bitsandbytes-fp4` as a command line argument to `text-generation-launcher`.
+
+Read more about quantization in the [Quantization documentation](https://huggingface.co/docs/text-generation-inference/en/conceptual/quantization).
 
 ## Develop
 
@@ -274,9 +342,3 @@ make rust-tests
 # integration tests
 make integration-tests
 ```
-
-
-## Other supported hardware
-
-TGI is also supported on the following AI hardware accelerators:
-- *Habana first-gen Gaudi and Gaudi2:* checkout [here](https://github.com/huggingface/optimum-habana/tree/main/text-generation-inference) how to serve models with TGI on Gaudi and Gaudi2 with [Optimum Habana](https://huggingface.co/docs/optimum/habana/index)

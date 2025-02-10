@@ -4,7 +4,7 @@
 /// and: https://github.com/orhun/rust-tui-template
 use clap::Parser;
 use std::path::Path;
-use text_generation_client::ShardedClient;
+use text_generation_client::v3::ShardedClient;
 use tokenizers::{FromPretrainedParameters, Tokenizer};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -87,12 +87,22 @@ struct Args {
     /// Generation parameter in case you want to specifically test/debug particular
     /// decoding strategies, for full doc refer to the `text-generation-server`
     #[clap(long, env)]
+    frequency_penalty: Option<f32>,
+
+    /// Generation parameter in case you want to specifically test/debug particular
+    /// decoding strategies, for full doc refer to the `text-generation-server`
+    #[clap(long, env)]
     watermark: bool,
 
     /// Generation parameter in case you want to specifically test/debug particular
     /// decoding strategies, for full doc refer to the `text-generation-server`
     #[clap(long, env)]
     do_sample: bool,
+
+    /// Generation parameter in case you want to specifically test/debug particular
+    /// decoding strategies, for full doc refer to the `text-generation-server`
+    #[clap(long, env)]
+    top_n_tokens: Option<u32>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -114,9 +124,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         top_p,
         typical_p,
         repetition_penalty,
+        frequency_penalty,
         watermark,
         do_sample,
         master_shard_uds_path,
+        top_n_tokens,
     } = args;
 
     let batch_size = batch_size.unwrap_or(vec![1, 2, 4, 8, 16, 32]);
@@ -135,13 +147,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             tracing::info!("Downloading tokenizer");
 
             // Parse Huggingface hub token
-            let auth_token = std::env::var("HUGGING_FACE_HUB_TOKEN").ok();
+            let token = std::env::var("HF_TOKEN")
+                .or_else(|_| std::env::var("HUGGING_FACE_HUB_TOKEN"))
+                .ok();
 
             // Download and instantiate tokenizer
             // We need to download it outside of the Tokio runtime
             let params = FromPretrainedParameters {
                 revision,
-                auth_token,
+                token,
                 ..Default::default()
             };
             Tokenizer::from_pretrained(tokenizer_name.clone(), Some(params)).unwrap()
@@ -164,6 +178,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .clear_cache(None)
                 .await
                 .expect("Unable to clear cache");
+
             tracing::info!("Connected");
 
             // Run app
@@ -173,6 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 batch_size,
                 sequence_length,
                 decode_length,
+                top_n_tokens,
                 runs,
                 warmups,
                 temperature,
@@ -180,6 +196,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 top_p,
                 typical_p,
                 repetition_penalty,
+                frequency_penalty,
                 watermark,
                 do_sample,
                 sharded_client,

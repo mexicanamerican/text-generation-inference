@@ -24,27 +24,38 @@ import torch.distributed
 from torch import nn
 from transformers.activations import ACT2FN
 from transformers.modeling_utils import PreTrainedModel
-from transformers.models.gpt_neox import GPTNeoXConfig
+from transformers.models.gpt_neox import GPTNeoXConfig as TransformersGPTNeoXConfig
 from typing import Optional, List, Tuple
-
-# vllm imports
-import vllm_cache_ops
-import vllm_attention_ops
-
-from text_generation_server.utils.flash_attn import attention
-from text_generation_server.utils.layers import (
+from text_generation_server.layers.attention import (
+    paged_attention,
+    attention,
+    Seqlen,
+)
+from text_generation_server.layers import (
     TensorParallelRowLinear,
     TensorParallelColumnLinear,
     TensorParallelEmbedding,
-    TensorParallelHead,
-    FastLayerNorm,
-    PositionRotaryEmbedding,
+    SpeculativeHead,
     get_linear,
 )
+from text_generation_server.layers.attention.kv_cache import get_kv_scales
+from text_generation_server.layers.layernorm import (
+    FastLayerNorm,
+)
+from text_generation_server.layers.rotary import (
+    PositionRotaryEmbedding,
+)
+from text_generation_server.utils.weights import UnquantizedWeight
+
+
+class GPTNeoXConfig(TransformersGPTNeoXConfig):
+    attribute_map = {
+        "num_key_value_heads": "num_attention_heads",
+    }
 
 
 def load_row(config, prefix: str, weights, bias: bool):
-    weight = weights.get_multi_weights_row(prefix, quantize=config.quantize)
+    weight = weights.get_weights_row(prefix)
 
     if bias and weights.process_group.rank() == 0:
         # Rank is only on the first rank process
@@ -52,7 +63,7 @@ def load_row(config, prefix: str, weights, bias: bool):
     else:
         bias = None
 
-    linear = get_linear(weight, bias, config.quantize)
+    linear = get_linear(weight, bias)
     if config.use_parallel_residual:
         return linear
     else:
@@ -60,11 +71,11 @@ def load_row(config, prefix: str, weights, bias: bool):
 
 
 def load_qkv(config, prefix: str, weights, num_heads, head_size, hidden_size):
-    weight = weights.get_multi_weights_col([prefix], quantize=config.quantize, dim=0)
-    if isinstance(weight, torch.Tensor):
+    weight = weights.get_multi_weights_col([prefix], dim=0)
+    if isinstance(weight, UnquantizedWeight):
         # Only on non quantized versions
-        weight = (
-            weight.view(
+        weight.weight = (
+            weight.weight.view(
                 num_heads,
                 3,
                 head_size,
@@ -77,7 +88,7 @@ def load_qkv(config, prefix: str, weights, num_heads, head_size, hidden_size):
     bias = weights.get_sharded(f"{prefix}.bias", dim=0)
     bias = bias.view(num_heads, 3, head_size).permute(1, 0, 2).reshape(-1)
 
-    linear = get_linear(weight, bias, config.quantize)
+    linear = get_linear(weight, bias)
     if config.use_parallel_residual:
         return linear
     else:
@@ -94,6 +105,8 @@ class FlashNeoxAttention(torch.nn.Module):
         self.hidden_size = hidden_size
         self.head_size = hidden_size // num_heads
 
+        self.rotary_dim = int(config.rotary_pct * self.head_size)
+
         if self.num_heads % weights.process_group.size() != 0:
             raise ValueError(
                 f"`num_heads` must be divisible by `num_shards` (got `num_heads`: {self.num_heads} "
@@ -101,8 +114,11 @@ class FlashNeoxAttention(torch.nn.Module):
             )
         self.num_heads = self.num_heads // weights.process_group.size()
 
-        self.rotary_emb = PositionRotaryEmbedding.load(
-            config=config, prefix=f"{prefix}.rotary_emb", weights=weights
+        self.rotary_emb = PositionRotaryEmbedding.static(
+            config=config,
+            dim=self.rotary_dim,
+            base=config.rotary_emb_base,
+            device=weights.device,
         )
 
         self.softmax_scale = self.head_size ** (-0.5)
@@ -115,6 +131,7 @@ class FlashNeoxAttention(torch.nn.Module):
             head_size=self.head_size,
             hidden_size=self.hidden_size,
         )
+        self.kv_scales = get_kv_scales(weights, f"{prefix}")
         self.dense = load_row(
             config, prefix=f"{prefix}.dense", weights=weights, bias=True
         )
@@ -131,50 +148,54 @@ class FlashNeoxAttention(torch.nn.Module):
         kv_cache,
         block_tables,
         slots,
-        input_lengths,
+        seqlen,
         max_s,
     ):
         qkv = self.query_key_value(hidden_states)
         qkv = qkv.view(-1, 3, self.num_heads, self.head_size)
 
+        # Compute rotary embeddings on rotary_ndims
+        query_rot = qkv[:, 0][..., : self.rotary_dim]
+        query_pass = qkv[:, 0][..., self.rotary_dim :]
+        key_rot = qkv[:, 1][..., : self.rotary_dim]
+        key_pass = qkv[:, 1][..., self.rotary_dim :]
+
         # Inplace rotary
-        self.rotary_emb(qkv[:, 0], cos, sin)
-        self.rotary_emb(qkv[:, 1], cos, sin)
+        self.rotary_emb(query_rot, key_rot, cos, sin)
+        qkv[:, 0] = torch.cat((query_rot, query_pass), dim=-1)
+        qkv[:, 1] = torch.cat((key_rot, key_pass), dim=-1)
 
-        vllm_cache_ops.reshape_and_cache(
-            qkv[:, 1], qkv[:, 2], kv_cache[0], kv_cache[1], slots
+        kv_cache.store(
+            key=qkv[:, 1],
+            value=qkv[:, 2],
+            slots=slots,
+            kv_scales=self.kv_scales,
         )
-
-        # output tensor
-        attn_output = torch.empty_like(qkv[:, 0])
 
         # Prefill
         if cu_seqlen_prefill is not None:
             # flash attention
-            attention(
-                qkv[:, 0],
-                qkv[:, 1],
-                qkv[:, 2],
-                attn_output,
-                cu_seqlen_prefill,
-                max_s,
-                self.softmax_scale,
+            attn_output = attention(
+                query=qkv[:, 0],
+                key=qkv[:, 1],
+                value=qkv[:, 2],
+                kv_cache=kv_cache,
+                kv_scales=self.kv_scales,
+                seqlen=seqlen,
+                block_tables=block_tables,
+                softmax_scale=self.softmax_scale,
             )
         # Decode
         else:
-            # kv_cache[1] => [num_blocks, num_heads, head_size, block_size]
-            block_size = kv_cache[1].shape[3]
-            vllm_attention_ops.single_query_cached_kv_attention(
-                attn_output,
+            attn_output = paged_attention(
                 qkv[:, 0],
-                kv_cache[0],
-                kv_cache[1],
+                kv_cache,
                 self.kv_head_mapping,
                 self.softmax_scale,
                 block_tables,
-                input_lengths,
-                block_size,
+                seqlen,
                 max_s,
+                kv_scales=self.kv_scales,
             )
 
         return self.dense(attn_output.view(-1, self.num_heads * self.head_size))
@@ -189,9 +210,9 @@ class FlashMLP(nn.Module):
             if "gelu" not in act
             else lambda x: torch.nn.functional.gelu(
                 x,
-                approximate="tanh"
-                if act in ["gelu_fast", "gelu_pytorch_tanh"]
-                else "none",
+                approximate=(
+                    "tanh" if act in ["gelu_fast", "gelu_pytorch_tanh"] else "none"
+                ),
             )
         )
 
@@ -243,7 +264,7 @@ class FlashNeoXLayer(nn.Module):
         kv_cache,
         block_tables,
         slots,
-        input_lengths,
+        seqlen,
         max_s,
     ):
         if self.use_parallel_residual:
@@ -257,7 +278,7 @@ class FlashNeoXLayer(nn.Module):
                 kv_cache,
                 block_tables,
                 slots,
-                input_lengths,
+                seqlen,
                 max_s,
             )
 
@@ -281,7 +302,7 @@ class FlashNeoXLayer(nn.Module):
                 kv_cache,
                 block_tables,
                 slots,
-                input_lengths,
+                seqlen,
                 max_s,
             )
 
@@ -302,12 +323,12 @@ class FlashGPTNeoXPreTrainedModel(PreTrainedModel):
 
 
 class FlashGPTNeoXModel(FlashGPTNeoXPreTrainedModel):
-    def __init__(self, config, weights):
+    def __init__(self, prefix: str, config, weights):
         super().__init__(config)
         self.config = config
 
         self.embed_in = TensorParallelEmbedding(
-            prefix="gpt_neox.embed_in", weights=weights
+            prefix=f"{prefix}.embed_in", weights=weights
         )
 
         self.layers = nn.ModuleList(
@@ -317,7 +338,7 @@ class FlashGPTNeoXModel(FlashGPTNeoXPreTrainedModel):
             ]
         )
         self.final_layer_norm = FastLayerNorm.load(
-            prefix="gpt_neox.final_layer_norm",
+            prefix=f"{prefix}.final_layer_norm",
             weights=weights,
             eps=config.layer_norm_eps,
         )
@@ -335,7 +356,7 @@ class FlashGPTNeoXModel(FlashGPTNeoXPreTrainedModel):
         kv_cache: List[Tuple[torch.Tensor, torch.Tensor]],
         block_tables: torch.Tensor,
         slots: torch.Tensor,
-        input_lengths: torch.Tensor,
+        seqlen: Seqlen,
         max_s: int,
     ) -> torch.Tensor:
         hidden_states = self.embed_in(input_ids)
@@ -357,7 +378,7 @@ class FlashGPTNeoXModel(FlashGPTNeoXPreTrainedModel):
                 kv_cache[i],
                 block_tables,
                 slots,
-                input_lengths,
+                seqlen,
                 max_s,
             )
 
@@ -367,11 +388,17 @@ class FlashGPTNeoXModel(FlashGPTNeoXPreTrainedModel):
 
 
 class FlashGPTNeoXForCausalLM(FlashGPTNeoXPreTrainedModel):
-    def __init__(self, config, weights):
+    def __init__(self, prefix, config, weights):
         super().__init__(config)
-        self.gpt_neox = FlashGPTNeoXModel(config, weights)
 
-        self.embed_out = TensorParallelHead.load(
+        if not prefix:
+            prefix = "gpt_neox"
+        else:
+            prefix = f"{prefix}.gpt_neox"
+
+        self.gpt_neox = FlashGPTNeoXModel(prefix, config, weights)
+
+        self.embed_out = SpeculativeHead.load(
             config, prefix="embed_out", weights=weights
         )
 
@@ -383,9 +410,11 @@ class FlashGPTNeoXForCausalLM(FlashGPTNeoXPreTrainedModel):
         kv_cache: List[Tuple[torch.Tensor, torch.Tensor]],
         block_tables: torch.Tensor,
         slots: torch.Tensor,
-        input_lengths: torch.Tensor,
+        seqlen: Seqlen,
         max_s: int,
+        prefill_cache_indices: Optional[torch.Tensor],
         lm_head_indices: Optional[torch.Tensor] = None,
+        adapter_data: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         hidden_states = self.gpt_neox(
             input_ids,
@@ -394,7 +423,7 @@ class FlashGPTNeoXForCausalLM(FlashGPTNeoXPreTrainedModel):
             kv_cache,
             block_tables,
             slots,
-            input_lengths,
+            seqlen,
             max_s,
         )
         if lm_head_indices is not None:

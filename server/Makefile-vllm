@@ -1,13 +1,13 @@
-vllm_commit := d284b831c17f42a8ea63369a06138325f73c4cf9
+commit_rocm := de990cd12537f78f74e40b5c8ee1a62d63d734dd
 
-vllm:
-    # Clone vllm
-	git clone https://github.com/OlivierDehaene/vllm.git
+build-vllm-rocm:
+	if [ ! -d 'vllm' ]; then \
+		pip install -U ninja packaging --no-cache-dir && \
+		git clone https://github.com/mht-sharma/vllm.git vllm; \
+	fi
+	cd vllm && git fetch && git checkout $(commit_rocm) &&  \
+	PYTORCH_ROCM_ARCH="gfx90a;gfx942" python setup.py build
 
-build-vllm: vllm
-	cd vllm && git fetch && git checkout $(vllm_commit)
-	cd vllm && python setup.py build
-
-install-vllm: build-vllm
-	pip uninstall vllm -y || true
-	cd vllm && python setup.py install
+install-vllm-rocm: build-vllm-rocm
+	cd vllm && git fetch && git checkout $(commit_rocm) && \
+	PYTORCH_ROCM_ARCH="gfx90a;gfx942" pip install -e .

@@ -1,8 +1,9 @@
 use std::time::{Duration, Instant};
-use text_generation_client::{
-    Batch, CachedBatch, ClientError, NextTokenChooserParameters, Request, ShardedClient,
+use text_generation_client::v3::{
+    Batch, CachedBatch, NextTokenChooserParameters, Request, ShardedClient,
     StoppingCriteriaParameters,
 };
+use text_generation_client::{Chunk, ClientError, Input};
 use tokenizers::{Tokenizer, TruncationDirection};
 use tokio::sync::{broadcast, mpsc};
 
@@ -37,6 +38,7 @@ pub(crate) async fn generation_task(
     batch_size: Vec<u32>,
     sequence_length: u32,
     decode_length: u32,
+    top_n_tokens: Option<u32>,
     n_runs: usize,
     warmups: usize,
     parameters: NextTokenChooserParameters,
@@ -48,7 +50,7 @@ pub(crate) async fn generation_task(
     // End task if a message is received on shutdown_receiver
     // _shutdown_guard_sender will be dropped once the task is finished
     tokio::select! {
-        res = generate_runs(tokenizer, batch_size, sequence_length, decode_length, n_runs, warmups, parameters, client, run_sender.clone())  => {
+        res = generate_runs(tokenizer, batch_size, sequence_length, decode_length, top_n_tokens, n_runs, warmups, parameters, client, run_sender.clone())  => {
             if let Err(err) = res {
                 run_sender.send(Err(err)).await.unwrap_or(());
             }
@@ -64,6 +66,7 @@ async fn generate_runs(
     batch_size: Vec<u32>,
     sequence_length: u32,
     decode_length: u32,
+    top_n_tokens: Option<u32>,
     n_runs: usize,
     warmups: usize,
     parameters: NextTokenChooserParameters,
@@ -82,6 +85,7 @@ async fn generate_runs(
                 b,
                 decode_length,
                 parameters.clone(),
+                top_n_tokens,
                 &mut client,
             )
             .await?;
@@ -97,6 +101,7 @@ async fn generate_runs(
                 b,
                 decode_length,
                 parameters.clone(),
+                top_n_tokens,
                 &mut client,
             )
             .await?;
@@ -130,6 +135,7 @@ async fn prefill(
     batch_size: u32,
     decode_length: u32,
     parameters: NextTokenChooserParameters,
+    top_n_tokens: Option<u32>,
     client: &mut ShardedClient,
 ) -> Result<(Prefill, CachedBatch), ClientError> {
     // Create requests
@@ -137,14 +143,24 @@ async fn prefill(
         .map(|id| Request {
             id: id.into(),
             prefill_logprobs: false,
+            input_chunks: Some(Input {
+                chunks: vec![Chunk::Text(sequence.clone()).into()],
+            }),
             inputs: sequence.clone(),
             truncate: sequence_length,
+            add_special_tokens: true,
             parameters: Some(parameters.clone()),
             stopping_parameters: Some(StoppingCriteriaParameters {
                 max_new_tokens: decode_length,
                 stop_sequences: vec![],
                 ignore_eos_token: true, // Will not stop even if a eos token is generated
             }),
+            top_n_tokens: top_n_tokens.unwrap_or(0),
+            blocks: vec![],
+            slots: vec![],
+            cache_len: 0,
+            chunk_len: None,
+            adapter_id: None,
         })
         .collect();
 
@@ -153,17 +169,18 @@ async fn prefill(
         requests,
         size: batch_size,
         max_tokens: batch_size * (sequence_length + decode_length),
+        max_blocks: 0,
     };
 
     // Run prefill
     let start_time = Instant::now();
-    let (_, decode_batch) = client.prefill(batch.clone()).await?;
+    let (_, decode_batch, _) = client.prefill(batch.clone(), None).await?;
 
     // Get latency
     let latency = start_time.elapsed();
 
     // Compute throughput from latency and batch size
-    let throughput = batch_size as f64 / latency.as_secs_f64();
+    let throughput = (batch_size * sequence_length) as f64 / latency.as_secs_f64();
 
     // Decode batch cannot be empty
     let decode_batch = decode_batch.expect("decode_batch is None. This is a bug.");
@@ -217,7 +234,5 @@ fn create_sequence(sequence_length: u32, tokenizer: Tokenizer) -> String {
     // Truncate to sequence_length
     encoding.truncate(sequence_length as usize, 0, TruncationDirection::Left);
     // Decode
-    tokenizer
-        .decode(Vec::from(encoding.get_ids()), false)
-        .unwrap()
+    tokenizer.decode(encoding.get_ids(), false).unwrap()
 }

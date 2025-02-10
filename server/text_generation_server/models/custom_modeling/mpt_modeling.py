@@ -2,8 +2,8 @@
 
 Inspired by https://github.com/karpathy/minGPT/blob/master/mingpt/model.py
 """
+
 import math
-import os
 import warnings
 from typing import List, Optional, Tuple, Union
 import torch
@@ -16,11 +16,11 @@ from transformers.modeling_outputs import (
 )
 from einops import rearrange
 from packaging import version
-from text_generation_server.utils.layers import (
+from text_generation_server.layers import (
     TensorParallelEmbedding,
     TensorParallelColumnLinear,
     TensorParallelRowLinear,
-    TensorParallelHead,
+    SpeculativeHead,
     get_linear,
 )
 
@@ -28,7 +28,6 @@ EPS = 1e-5
 
 
 def load_col(config, prefix, weights, bias):
-    assert bias == False, NotImplementedError
     assert config.quantize != "gptq", NotImplementedError
     slice_ = weights._get_slice(f"{prefix}.weight")
     rank = weights.process_group.rank()
@@ -45,8 +44,37 @@ def load_col(config, prefix, weights, bias):
     if weight.dtype != torch.int32:
         weight = weight.to(dtype=weights.dtype)
     weight = weight.to(device=weights.device)
-    bias = None
-    linear = get_linear(weight, bias, config.quantize)
+
+    if bias:
+        bias_slice_ = weights._get_slice(f"{prefix}.bias")
+        bias_rank = weights.process_group.rank()
+        bias_size = weights.process_group.size()
+
+        bias_h = bias_slice_.get_shape()
+        bias_h = bias_h[0]
+        bias_block_size = bias_h // bias_size
+
+        bias_q_part = bias_slice_[
+            bias_rank * bias_block_size : (bias_rank + 1) * bias_block_size
+        ]
+        bias_k_part = bias_slice_[
+            bias_h
+            + bias_rank * bias_block_size : bias_h
+            + (bias_rank + 1) * bias_block_size
+        ]
+        bias_v_part = bias_slice_[
+            2 * bias_h
+            + bias_rank * bias_block_size : 2 * bias_h
+            + (bias_rank + 1) * bias_block_size
+        ]
+
+        bias = torch.cat([bias_q_part, bias_k_part, bias_v_part], dim=0)
+        if bias.dtype != torch.int32:
+            bias = bias.to(dtype=weights.dtype)
+        bias = bias.to(device=weights.device)
+    else:
+        bias = None
+    linear = get_linear(weight, bias)
     return TensorParallelColumnLinear(linear)
 
 
@@ -165,7 +193,7 @@ def flash_attn_fn(
 ):
     try:
         from flash_attn import bert_padding, flash_attn_interface
-    except:
+    except Exception:
         raise RuntimeError("Please install flash-attn==1.0.3.post0")
     check_valid_inputs(query, key, value)
     if past_key_value is not None:
@@ -178,7 +206,7 @@ def flash_attn_fn(
         _s_k = max(0, attn_bias.size(3) - key.size(1))
         attn_bias = attn_bias[:, :, _s_q:, _s_k:]
     if attn_bias is not None:
-        raise NotImplementedError(f"attn_bias not implemented for flash attn.")
+        raise NotImplementedError("attn_bias not implemented for flash attn.")
     (batch_size, seqlen) = query.shape[:2]
     if key_padding_mask is None:
         key_padding_mask = torch.ones_like(key[:, :, 0], dtype=torch.bool)
@@ -240,13 +268,13 @@ def triton_flash_attn_fn(
 ):
     try:
         from .flash_attn_triton import flash_attn_func
-    except:
+    except Exception:
         _installed = False
         if version.parse(torch.__version__) < version.parse("2.0.0"):
             _installed = True
             try:
                 from flash_attn.flash_attn_triton import flash_attn_func
-            except:
+            except Exception:
                 _installed = False
         if not _installed:
             raise RuntimeError(
@@ -263,9 +291,9 @@ def triton_flash_attn_fn(
         _s_k = max(0, attn_bias.size(3) - key.size(1))
         attn_bias = attn_bias[:, :, _s_q:, _s_k:]
     if dropout_p:
-        raise NotImplementedError(f"Dropout not implemented for attn_impl: triton.")
+        raise NotImplementedError("Dropout not implemented for attn_impl: triton.")
     if needs_weights:
-        raise NotImplementedError(f"attn_impl: triton cannot return attn weights.")
+        raise NotImplementedError("attn_impl: triton cannot return attn weights.")
     if key_padding_mask is not None:
         warnings.warn(
             "Propagating key_padding_mask to the attention module "
@@ -308,17 +336,17 @@ class MultiheadAttention(nn.Module):
         weights,
     ):
         super().__init__()
-        attn_impl = config.attn_config["attn_impl"]
-        self.attn_impl = config.attn_config["attn_impl"]
-        self.clip_qkv = config.attn_config["clip_qkv"]
-        self.qk_ln = config.attn_config["qk_ln"]
+        attn_impl = config.attn_config.attn_impl
+        self.attn_impl = config.attn_config.attn_impl
+        self.clip_qkv = config.attn_config.clip_qkv
+        self.qk_ln = config.attn_config.qk_ln
         self.d_model = config.d_model
         d_model = config.d_model
         self.n_heads = config.n_heads
-        self.softmax_scale = config.attn_config["softmax_scale"]
+        self.softmax_scale = config.attn_config.softmax_scale
         if self.softmax_scale is None:
             self.softmax_scale = 1 / math.sqrt(self.d_model / self.n_heads)
-        self.attn_dropout_p = config.attn_config["attn_pdrop"]
+        self.attn_dropout_p = config.attn_config.attn_pdrop
 
         if self.n_heads % weights.process_group.size() != 0:
             raise ValueError(
@@ -330,7 +358,16 @@ class MultiheadAttention(nn.Module):
             config, prefix=f"{prefix}.Wqkv", weights=weights, bias=not config.no_bias
         )
         if self.qk_ln:
-            raise NotImplementedError("qk_ln is not supported")
+            bias = not config.no_bias
+            hidden_size = config.d_model
+            head_dim = hidden_size // self.n_heads
+
+            self.q_ln = LPLayerNorm(
+                d_model, bias=bias, prefix=f"{prefix}.q_ln", weights=weights
+            )
+            self.k_ln = LPLayerNorm(
+                self.n_heads * head_dim, prefix=f"{prefix}.k_ln", weights=weights
+            )
         if self.attn_impl == "flash":
             self.attn_fn = flash_attn_fn
         elif self.attn_impl == "triton":
@@ -390,24 +427,24 @@ class MultiQueryAttention(nn.Module):
     additive bias.
     """
 
-    def __init__(self, config, prefix, weights):
+    def __init__(self, config, prefix, weights, verbose=False):
         super().__init__()
-        attn_impl = config.attn_config["attn_impl"]
-        self.attn_impl = config.attn_config["attn_impl"]
-        self.clip_qkv = config.attn_config["clip_qkv"]
-        self.qk_ln = config.attn_config["qk_ln"]
+        attn_impl = config.attn_config.attn_impl
+        self.attn_impl = config.attn_config.attn_impl
+        self.clip_qkv = config.attn_config.clip_qkv
+        self.qk_ln = config.attn_config.qk_ln
         self.d_model = config.d_model
         d_model = config.d_model
         self.n_heads = config.n_heads
-        self.softmax_scale = config.attn_config["softmax_scale"]
+        self.softmax_scale = config.attn_config.softmax_scale
         if self.softmax_scale is None:
             self.softmax_scale = 1 / math.sqrt(self.head_dim)
-        self.attn_dropout_p = config.attn_config["attn_pdrop"]
+        self.attn_dropout_p = config.attn_config.attn_pdrop
         # self.Wqkv = nn.Linear(d_model, d_model + 2 * self.head_dim, device=device)
         self.Wqkv = TensorParallelColumnLinear.load(
             config, prefix=f"{prefix}.Wqkv", weights=weights, bias=not config.no_bias
         )
-        fuse_splits = (d_model, d_model + self.head_dim)
+        (d_model, d_model + self.head_dim)
         if self.qk_ln:
             raise NotImplementedError("qk_ln not supported")
         if self.attn_impl == "flash":
@@ -576,17 +613,25 @@ class MPTBlock(nn.Module):
     def __init__(self, config, prefix, weights):
         super().__init__()
         self.prefix = prefix
-        if config.attn_config["attn_type"] != "multihead_attention":
+        if config.attn_config.attn_type != "multihead_attention":
             raise NotImplementedError(
-                f"""Not implemented attn {config.attn_config["attn_type"]}"""
+                f"""Not implemented attn {config.attn_config.attn_type}"""
             )
         resid_pdrop = config.resid_pdrop
-        self.norm_1 = nn.LayerNorm.load_no_bias(
-            prefix=f"{prefix}.norm_1", weights=weights, eps=EPS
-        )
-        self.norm_2 = nn.LayerNorm.load_no_bias(
-            prefix=f"{prefix}.norm_2", weights=weights, eps=EPS
-        )
+        if config.no_bias:
+            self.norm_1 = nn.LayerNorm.load_no_bias(
+                prefix=f"{prefix}.norm_1", weights=weights, eps=EPS
+            )
+            self.norm_2 = nn.LayerNorm.load_no_bias(
+                prefix=f"{prefix}.norm_2", weights=weights, eps=EPS
+            )
+        else:
+            self.norm_1 = nn.LayerNorm.load(
+                prefix=f"{prefix}.norm_1", weights=weights, eps=EPS
+            )
+            self.norm_2 = nn.LayerNorm.load(
+                prefix=f"{prefix}.norm_2", weights=weights, eps=EPS
+            )
         self.attn = MultiheadAttention(config, prefix=f"{prefix}.attn", weights=weights)
         self.ffn = MPTMLP(config, prefix=f"{prefix}.ffn", weights=weights)
         self.resid_attn_dropout = nn.Dropout(resid_pdrop)
@@ -635,6 +680,9 @@ class LPLayerNorm(torch.nn.LayerNorm):
         elementwise_affine=True,
         device=None,
         dtype=None,
+        bias: Optional[bool] = True,
+        prefix=None,
+        weights=None,
     ):
         super().__init__(
             normalized_shape=normalized_shape,
@@ -642,7 +690,13 @@ class LPLayerNorm(torch.nn.LayerNorm):
             elementwise_affine=elementwise_affine,
             device=device,
             dtype=dtype,
+            bias=bias,
         )
+        if weights is not None:
+            self.weight = nn.Parameter(weights.get_sharded(f"{prefix}.weight", dim=0))
+            if bias:
+                self.bias = nn.Parameter(weights.get_sharded(f"{prefix}.bias", dim=0))
+            self.normalized_shape = self.weight.shape
 
     def forward(self, x):
         module_device = x.device
@@ -728,19 +782,21 @@ class MPTPreTrainedModel(PreTrainedModel):
 
 
 class MPTModel(MPTPreTrainedModel):
-    def __init__(self, config, weights):
+    def __init__(self, prefix: str, config, weights):
         # config._validate_config()
         super().__init__(config)
         self.world_size = weights.process_group.size()
         self.rank = weights.process_group.rank()
         self.n_heads = config.n_heads
-        self.attn_impl = config.attn_config["attn_impl"]
-        self.prefix_lm = config.attn_config["prefix_lm"]
-        self.attn_uses_sequence_id = config.attn_config["attn_uses_sequence_id"]
-        self.alibi = config.attn_config["alibi"]
-        self.alibi_bias_max = config.attn_config["alibi_bias_max"]
+        self.attn_impl = config.attn_config.attn_impl
+        self.prefix_lm = config.attn_config.prefix_lm
+        self.attn_uses_sequence_id = config.attn_config.attn_uses_sequence_id
+        self.alibi = config.attn_config.alibi
+        self.alibi_bias_max = config.attn_config.alibi_bias_max
         if config.init_device == "mixed":
-            if dist.get_local_rank() == 0:
+            # TODO: reimplement mixed device initialization
+            # dist.get_local_rank() == 0:
+            if True:
                 config.init_device = "cpu"
             else:
                 config.init_device = "meta"
@@ -754,21 +810,24 @@ class MPTModel(MPTPreTrainedModel):
                 f"Requested norm type ({config.norm_type}) is not implemented within this repo."
             )
 
-        self.wte = TensorParallelEmbedding("transformer.wte", weights)
+        self.wte = TensorParallelEmbedding(f"{prefix}.wte", weights)
+
         if not self.alibi:
-            # self.wpe = torch.nn.Embedding(
-            #     config.max_seq_len, config.d_model, device=config.init_device
-            # )
-            raise RuntimeError("no alibi no supported")
+            self.wpe = TensorParallelEmbedding(f"{prefix}.wpe", weights)
         self.blocks = nn.ModuleList(
             [
-                MPTBlock(config, prefix=f"transformer.blocks.{i}", weights=weights)
+                MPTBlock(config, prefix=f"{prefix}.blocks.{i}", weights=weights)
                 for i in range(config.n_layers)
             ]
         )
-        self.norm_f = nn.LayerNorm.load_no_bias(
-            prefix="transformer.norm_f", weights=weights, eps=EPS
-        )
+        if config.no_bias:
+            self.norm_f = nn.LayerNorm.load_no_bias(
+                prefix="transformer.norm_f", weights=weights, eps=EPS
+            )
+        else:
+            self.norm_f = nn.LayerNorm.load(
+                prefix="transformer.norm_f", weights=weights, eps=EPS
+            )
         self.is_causal = not self.prefix_lm
         self._attn_bias_initialized = False
         self.attn_bias = None
@@ -787,8 +846,9 @@ class MPTModel(MPTPreTrainedModel):
                     if config.verbose:
                         warnings.warn(f"Removing bias ({module.bias}) from {module}.")
                     module.register_parameter("bias", None)
-        if config.verbose and config.verbose > 2:
-            print(self)
+        if hasattr(self.config, "verbose"):
+            if config.verbose and config.verbose > 2:
+                print(self)
         if "verbose" not in self.config.init_config:
             self.config.init_config["verbose"] = self.config.verbose
         if self.config.init_config["verbose"] > 1:
@@ -957,7 +1017,7 @@ class MPTModel(MPTPreTrainedModel):
             if past_key_values is not None:
                 if len(past_key_values) != self.config.n_layers:
                     raise ValueError(
-                        f"past_key_values must provide a past_key_value for each attention "
+                        "past_key_values must provide a past_key_value for each attention "
                         + f"layer in the network (len(past_key_values)={len(past_key_values)!r}; self.config.n_layers={self.config.n_layers!r})."
                     )
                 past_position = past_key_values[0][0].size(1)
@@ -1026,13 +1086,19 @@ class MPTModel(MPTPreTrainedModel):
 
 
 class MPTForCausalLM(MPTPreTrainedModel):
-    def __init__(self, config, weights):
+    def __init__(self, prefix: str, config, weights):
         super().__init__(config)
+
+        if not prefix:
+            prefix = "transformer"
+        else:
+            prefix = f"{prefix}.transformer"
+
         if not config.tie_word_embeddings:
             raise ValueError("MPTForCausalLM only supports tied word embeddings")
-        self.transformer = MPTModel(config, weights)
-        self.lm_head = TensorParallelHead.load(
-            config, prefix="transformer.wte", weights=weights
+        self.transformer = MPTModel(prefix, config, weights)
+        self.lm_head = SpeculativeHead.load(
+            config, prefix=f"{prefix}.wte", weights=weights
         )
         self.logit_scale = None
         if config.logit_scale is not None:
@@ -1074,7 +1140,7 @@ class MPTForCausalLM(MPTPreTrainedModel):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
         )
-        logits = self.lm_head(outputs.last_hidden_state)
+        logits, speculative_logits = self.lm_head(outputs.last_hidden_state)
         if self.logit_scale is not None:
             if self.logit_scale == 0:
                 warnings.warn(
@@ -1088,12 +1154,15 @@ class MPTForCausalLM(MPTPreTrainedModel):
             loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)), labels.to(logits.device).view(-1)
             )
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+        return (
+            CausalLMOutputWithPast(
+                loss=loss,
+                logits=logits,
+                past_key_values=outputs.past_key_values,
+                hidden_states=outputs.hidden_states,
+                attentions=outputs.attentions,
+            ),
+            speculative_logits,
         )
 
     def prepare_inputs_for_generation(
@@ -1114,7 +1183,7 @@ class MPTForCausalLM(MPTPreTrainedModel):
             input_ids = input_ids[:, -1].unsqueeze(-1)
         if self.transformer.prefix_lm:
             prefix_mask = torch.ones_like(attention_mask)
-            if kwargs.get("use_cache") == False:
+            if kwargs.get("use_cache") is False:
                 raise NotImplementedError(
                     "MPT with prefix_lm=True does not support use_cache=False."
                 )
