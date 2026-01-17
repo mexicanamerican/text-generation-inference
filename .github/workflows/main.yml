@@ -1,0 +1,38 @@
+name: GitHub Actions
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: <correct_aws_region>
+          audience: <correct_audience>
+        env:
+          AWS_REGION: <correct_aws_region>
+          EC2_AMI_ID: <correct_ec2_ami_id>
+          EC2_INSTANCE_TYPE: <correct_ec2_instance_type>
+          EC2_SUBNET_ID: <correct_ec2_subnet_ids>
+          EC2_SECURITY_GROUP: <correct_ec2_security_group>
+
+      - name: Build and deploy
+        run: |
+          # Add build and deploy commands here
