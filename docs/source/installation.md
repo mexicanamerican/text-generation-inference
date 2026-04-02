@@ -20,12 +20,12 @@ make install
 If you would like to serve models with custom kernels, run
 
 ```bash
-BUILD_EXTENSIONS=True make install
+BUILD_EXTENSIONS=True make install && make troubleshoot
 ```
 
 ## Local Installation from Source
 
-Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+**.
+Before you start, you will need to setup your environment, and install Text Generation Inference. Text Generation Inference is tested on **Python 3.9+** and requires Rust and Protoc.
 
 Text Generation Inference is available on pypi, conda and GitHub.
 

@@ -79,6 +79,17 @@ Text Generation Inference (TGI) is a toolkit for deploying and serving Large Lan
 
 ## Get Started
 
+### Troubleshooting
+
+If you encounter build issues, follow these steps to debug and resolve common problems.
+
+1. **Check Dependencies:** Ensure that all required dependencies are installed and up to date.
+2. **Read the Logs:** Review the error logs to identify specific error messages and potential causes.
+3. **Search for Solutions:** Look for solutions to common build issues in the [text-generation-inference issue tracker](https://github.com/huggingface/text-generation-inference/issues) or community forums such as [Stack Overflow](https://stackoverflow.com/).
+4. **Consult Documentation:** Refer to the [text-generation-inference documentation](https://huggingface.github.io/text-generation-inference) for detailed information on troubleshooting and common errors.
+
+For further assistance, you can also reach out to the [Hugging Face community](https://huggingface.co/community).
+
 ### Docker
 
 For a detailed starting guide, please see the [Quick Tour](https://huggingface.co/docs/text-generation-inference/quicktour). The easiest way of getting started is using the official Docker container:
