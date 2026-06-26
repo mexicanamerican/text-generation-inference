@@ -79,7 +79,9 @@ Text Generation Inference (TGI) is a toolkit for deploying and serving Large Lan
 
 ## Get Started
 
-### Docker
+### Troubleshooting GitHub Actions Failures
+
+If you encounter GitHub Actions failures, follow the steps below to troubleshoot and resolve common issues:
 
 For a detailed starting guide, please see the [Quick Tour](https://huggingface.co/docs/text-generation-inference/quicktour). The easiest way of getting started is using the official Docker container:
 
